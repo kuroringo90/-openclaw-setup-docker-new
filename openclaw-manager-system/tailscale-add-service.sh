@@ -56,42 +56,55 @@ add_openclaw() {
         log_info "Per abilitare accesso remoto:"
         log_info "  1. Clona o copia tailscale-funnel-compose/"
         log_info "  2. Configura .env con TS_AUTHKEY"
-        log_info "  3. Esegui: cd ../tailscale-funnel-compose && ./start-service.sh openclaw ${OPENCLAW_PORT} /"
         exit 1
     fi
     
-    # Check se Tailscale è già attivo
+    # Check configurazione Tailscale
+    local ts_env="${DATA_DIR}/tailscale-funnel/.env"
+    local authkey=""
+    
+    if [[ -f "$ts_env" ]]; then
+        authkey="$(grep -E "^TS_AUTHKEY=" "$ts_env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || true)"
+    fi
+    
+    # Se Tailscale è già attivo, aggiungi servizio
     if docker ps --format '{{.Names}}' | grep -q "^tailscale-funnel$"; then
         log_success "Tailscale Funnel è attivo"
-        
-        # Chiedi se aggiungere OpenClaw
-        read -rp "Aggiungi OpenClaw come servizio su '/'? (y/n): " confirm
-        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            log_info "Operazione annullata"
-            return 0
-        fi
-        
-        # Aggiungi servizio
         (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" add openclaw "${OPENCLAW_PORT}" /)
         log_success "OpenClaw aggiunto a Tailscale Funnel"
-        
-        # Mostra URL
         echo
         log_info "URL Funnel:"
         (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)
-    else
-        log_info "Tailscale Funnel non è attivo"
-        log_info "Per avviare Tailscale ed esporre OpenClaw:"
-        echo
-        log_info "Opzione 1: Usa lo script helper"
-        echo -e "  ${BLUE}cd ../tailscale-funnel-compose${NC}"
-        echo -e "  ${BLUE}./start-service.sh openclaw ${OPENCLAW_PORT} /${NC}"
-        echo
-        log_info "Opzione 2: Configura manualmente"
-        echo -e "  ${BLUE}cd ../tailscale-funnel-compose${NC}"
-        echo -e "  ${BLUE}# Configura .env con TS_AUTHKEY${NC}"
-        echo -e "  ${BLUE}./tailscale-funnel-compose.sh start openclaw ${OPENCLAW_PORT} /${NC}"
+        return 0
     fi
+    
+    # Tailscale non attivo - check se è configurato
+    if [[ -n "$authkey" ]]; then
+        log_info "Tailscale non attivo ma configurato - avvio automatico..."
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" start openclaw "${OPENCLAW_PORT}" /)
+        log_success "OpenClaw esposto su Tailscale Funnel"
+        echo
+        log_info "URL Funnel:"
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)
+        return 0
+    fi
+    
+    # Tailscale non configurato
+    log_error "TS_AUTHKEY non configurata"
+    log_info "Per abilitare accesso remoto:"
+    echo
+    log_info "1. Configura TS_AUTHKEY:"
+    echo -e "   ${BLUE}cd ../tailscale-funnel-compose${NC}"
+    echo -e "   ${BLUE}cp .env.example .env${NC}"
+    echo -e "   ${BLUE}nano .env  # Imposta TS_AUTHKEY${NC}"
+    echo
+    log_info "2. Poi esegui:"
+    echo -e "   ${BLUE}./start-service.sh openclaw ${OPENCLAW_PORT} /${NC}"
+    echo
+    log_info "Oppure ottieni una chiave da:"
+    echo -e "   ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
+    
+    return 1
 }
 
 remove_openclaw() {
