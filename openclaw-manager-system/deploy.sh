@@ -243,6 +243,17 @@ print_next_steps() {
     echo "Documentation:"
     echo "  - README: ${PACKAGE_ROOT}/README.md"
     echo
+    
+    # Chiedi se abilitare Tailscale subito
+    if [[ -d "${PACKAGE_ROOT}/tailscale-funnel-compose" ]]; then
+        echo "============================================"
+        read -rp "Vuoi configurare Tailscale Funnel ora? (y/n): " configure_ts
+        if [[ "$configure_ts" == "y" || "$configure_ts" == "Y" ]]; then
+            echo
+            log_info "Verifica configurazione Tailscale..."
+            "${SCRIPT_DIR}/tailscale-add-service.sh" add || true
+        fi
+    fi
 }
 
 main() {

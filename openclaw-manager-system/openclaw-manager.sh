@@ -132,20 +132,7 @@ start_openclaw() {
     # Info su accesso remoto
     echo
     log_info "OpenClaw è accessibile in locale su: http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}"
-    
-    # Chiedi se abilitare Tailscale
-    if [[ -d "${PACKAGE_ROOT}/tailscale-funnel-compose" ]]; then
-        read -rp "Vuoi abilitare accesso remoto con Tailscale Funnel? (y/n): " enable_ts
-        if [[ "$enable_ts" == "y" || "$enable_ts" == "Y" ]]; then
-            echo
-            "${SCRIPT_DIR}/tailscale-add-service.sh" add || true
-        fi
-    else
-        log_info "Per abilitare accesso remoto con Tailscale Funnel:"
-        log_info "  1. Clona o copia il modulo tailscale-funnel-compose/"
-        log_info "  2. Configura TS_AUTHKEY"
-        log_info "  3. Esegui: ./tailscale-add-service.sh add"
-    fi
+    log_info "Per abilitare accesso remoto: ./tailscale-add-service.sh add"
 }
 
 stop_openclaw() {
