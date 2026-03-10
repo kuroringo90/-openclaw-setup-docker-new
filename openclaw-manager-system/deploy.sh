@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+TS_STACK_DIR="${PACKAGE_ROOT}/tailscale-funnel-compose"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 
 # Colors
@@ -276,21 +277,21 @@ setup_backup_cron() {
     if [[ "$BACKUP_ENABLED" != "true" ]]; then
         return
     fi
-    
+
     log_step "Setting up automatic backups..."
-    
-    # Create backup script symlink
+
+    # Create backup script symlink from Tailscale stack
     local backup_script="${DATA_DIR}/backup.sh"
     if [[ ! -f "$backup_script" ]]; then
-        cp "${SCRIPT_DIR}/backup.sh" "$backup_script"
+        cp "${TS_STACK_DIR}/backup.sh" "$backup_script"
         chmod +x "$backup_script"
     fi
-    
+
     # Suggest cron job
     log_info "To enable daily backups at 3 AM, add this crontab entry:"
     echo "  0 3 * * * ${backup_script} backup"
     echo
-    
+
     # Create initial backup
     read -rp "Create initial backup now? (y/n): " create_backup
     if [[ "$create_backup" == "y" || "$create_backup" == "Y" ]]; then
@@ -317,11 +318,11 @@ pull_docker_image() {
 
 run_health_check() {
     log_step "Running health check..."
-    
-    if [[ -f "${SCRIPT_DIR}/health-check.sh" ]]; then
-        "${SCRIPT_DIR}/health-check.sh" --quiet || true
+
+    if [[ -f "${TS_STACK_DIR}/health-check.sh" ]]; then
+        "${TS_STACK_DIR}/health-check.sh" --quiet || true
     fi
-    
+
     echo
 }
 

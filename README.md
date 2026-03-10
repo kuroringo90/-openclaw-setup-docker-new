@@ -82,21 +82,31 @@ cd openclaw-tailscale-qwen-branch-separated/openclaw-manager-system
 
 ## 📦 Components
 
+### tailscale-funnel-compose (Standalone Module)
+
+Modulo indipendente e riutilizzabile per qualsiasi progetto.
+
+| Script | Purpose |
+|--------|---------|
+| `tailscale-funnel-compose.sh` | Tailscale stack manager |
+| `health-check.sh` | Monitoring e health check |
+| `backup.sh` | Backup e restore operations |
+| `validate-config.sh` | Configuration validation |
+
+**Documentazione:**
+- [RUNBOOK.md](./tailscale-funnel-compose/RUNBOOK.md) - Operational procedures
+- [SECURITY.md](./tailscale-funnel-compose/SECURITY.md) - Security guide
+- [PRODUCTION-CHECKLIST.md](./tailscale-funnel-compose/PRODUCTION-CHECKLIST.md) - Deployment checklist
+
 ### OpenClaw Manager System
+
+Script specifici per OpenClaw che consumano il modulo Tailscale.
 
 | Script | Purpose |
 |--------|---------|
 | `deploy.sh` | Automated production deployment |
 | `openclaw-manager-tailscale.sh` | Main orchestration script |
-| `health-check.sh` | Monitoring and health checks |
-| `backup.sh` | Backup and restore operations |
-| `validate-config.sh` | Configuration validation |
-
-### Tailscale Funnel Compose
-
-| Script | Purpose |
-|--------|---------|
-| `tailscale-funnel-compose.sh` | Tailscale stack manager |
+| `tailscale-add-service.sh` | Legacy compatibility wrapper |
 
 ---
 
