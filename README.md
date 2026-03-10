@@ -14,7 +14,7 @@
 
 - Docker with Compose support
 - Linux, macOS, or Windows with WSL2
-- Tailscale account (free tier works)
+- Tailscale account (optional, for remote access)
 
 ### 5-Minute Deployment
 
@@ -23,13 +23,19 @@
 git clone https://github.com/kuroringo90/-openclaw-setup-docker-new.git
 cd openclaw-tailscale-qwen-branch-separated/openclaw-manager-system
 
-# 2. Run the deployment script
+# 2. Edit configuration (set TS_AUTHKEY for remote access)
+nano .env
+
+# 3. Deploy
 ./deploy.sh
 
-# 3. Start services
+# 4. Start OpenClaw (will ask about Tailscale)
 ./openclaw-manager-tailscale.sh start
 
-# 4. Get your secure URL
+# 5. Access locally
+curl http://127.0.0.1:18789/
+
+# 6. Get your secure URL (if Tailscale was enabled)
 ./openclaw-manager-tailscale.sh tunnel-url
 ```
 
@@ -112,31 +118,34 @@ Script specifici per OpenClaw che consumano il modulo Tailscale.
 
 ## 🔧 Configuration
 
-### Environment Variables
+### OpenClaw (Required)
 
-Create `~/.openclaw/.env`:
+Edit `openclaw-manager-system/.env`:
 
 ```bash
-# Required: Tailscale authentication
-TS_AUTHKEY=tskey-auth-xxx  # Get from tailscale.com/admin
-
-# Optional: API key for node cleanup
-TS_API_KEY=xxx
-
-# Optional: Your tailnet name
-TS_TAILNET=example.com
-
-# OpenClaw settings
+# OpenClaw settings (defaults work out-of-the-box)
+OPENCLAW_CONTAINER_NAME=openclaw
+OPENCLAW_IMAGE_NAME=ghcr.io/openclaw/openclaw:latest
 OPENCLAW_PORT=18789
-OPENCLAW_BIND_ADDRESS=127.0.0.1
+
+# Tailscale (OPTIONAL - leave empty for local-only access)
+TS_AUTHKEY=         # Set to enable Tailscale Funnel
+TS_API_KEY=         # Optional, for node cleanup
+TS_TAILNET=         # Optional, auto-detected
 ```
+
+### Tailscale (Optional)
+
+If you set `TS_AUTHKEY`, the Tailscale Funnel module will be available.
+Configuration is handled separately in `tailscale-funnel-compose/.env`.
 
 ### Validation
 
 Before deploying, validate your configuration:
 
 ```bash
-./validate-config.sh
+cd openclaw-manager-system
+./validate-config.sh  # From tailscale-funnel-compose module
 ```
 
 ---

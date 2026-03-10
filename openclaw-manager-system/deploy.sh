@@ -113,42 +113,20 @@ prompt_configuration() {
     log_step "Configuration"
     echo
 
-    # Check if TS_AUTHKEY is set
+    # Check if TS_AUTHKEY is set (optional)
     if [[ -z "$TS_AUTHKEY" ]]; then
-        echo -e "${YELLOW}Tailscale Auth Key (TS_AUTHKEY)${NC}"
-        echo "Get it from: https://login.tailscale.com/admin/settings/keys"
-        echo "Recommended: Create a pre-authenticated key with limited lifetime"
-        read -rp "Enter TS_AUTHKEY: " TS_AUTHKEY
-        echo
-    else
-        log_success "TS_AUTHKEY: configured"
-    fi
-
-    # TS_API_KEY (optional)
-    if [[ -z "$TS_API_KEY" ]]; then
-        echo -e "${YELLOW}Tailscale API Key (TS_API_KEY)${NC}"
-        echo "Optional but recommended for automatic duplicate node cleanup"
-        read -rp "Enter TS_API_KEY (or press Enter to skip): " TS_API_KEY
-        echo
-    else
-        log_success "TS_API_KEY: configured"
-    fi
-
-    # TS_TAILNET (optional - auto-detected)
-    if [[ -z "$TS_TAILNET" ]]; then
-        read -rp "Enter your Tailnet name (or press Enter to auto-detect): " TS_TAILNET
-        echo
-    else
-        log_success "TS_TAILNET: ${TS_TAILNET}"
-    fi
-
-    # Systemd
-    if [[ "$ENABLE_SYSTEMD" != "true" ]]; then
-        read -rp "Enable systemd auto-start? (y/n): " enable_systemd
-        if [[ "$enable_systemd" == "y" || "$enable_systemd" == "Y" ]]; then
-            ENABLE_SYSTEMD=true
+        echo -e "${YELLOW}Tailscale Integration (optional)${NC}"
+        echo "Leave empty to run OpenClaw locally without Tailscale"
+        echo "Get auth key from: https://login.tailscale.com/admin/settings/keys"
+        read -rp "Enter TS_AUTHKEY (or press Enter to skip): " TS_AUTHKEY
+        if [[ -n "$TS_AUTHKEY" ]]; then
+            # Ask for API key only if auth key is set
+            read -rp "Enter TS_API_KEY (optional, for cleanup): " TS_API_KEY
+            read -rp "Enter Tailnet name (or press Enter to auto-detect): " TS_TAILNET
         fi
         echo
+    else
+        log_success "TS_AUTHKEY: configured (Tailscale will be available)"
     fi
 }
 
@@ -179,7 +157,7 @@ create_configuration() {
     local env_file="${DATA_DIR}/.env"
     if [[ ! -f "$env_file" ]]; then
         cat > "$env_file" <<EOF
-# OpenClaw + Tailscale Runtime Configuration
+# OpenClaw Runtime Configuration
 # Generated on $(date -Iseconds)
 # DO NOT EDIT - changes will be overwritten
 # Edit ${SCRIPT_DIR}/.env instead
@@ -189,17 +167,21 @@ OPENCLAW_IMAGE_NAME=${OPENCLAW_IMAGE_NAME}
 OPENCLAW_DATA_DIR=${DATA_DIR}
 OPENCLAW_PORT=${OPENCLAW_PORT}
 OPENCLAW_BIND_ADDRESS=${OPENCLAW_BIND_ADDRESS}
+LOG_LEVEL=${LOG_LEVEL:-info}
+ENABLE_HEALTH_CHECK=${ENABLE_HEALTH_CHECK:-true}
+EOF
+        # Add Tailscale vars only if configured
+        if [[ -n "$TS_AUTHKEY" ]]; then
+            cat >> "$env_file" <<EOF
 
+# Tailscale configuration
 TS_AUTHKEY=${TS_AUTHKEY}
 TS_API_KEY=${TS_API_KEY}
 TS_TAILNET=${TS_TAILNET}
 TS_HOSTNAME=${TS_HOSTNAME}
 TS_CONTAINER_NAME=${TS_CONTAINER_NAME}
-TS_ENABLE_FUNNEL=${TS_ENABLE_FUNNEL}
-
-LOG_LEVEL=${LOG_LEVEL:-info}
-ENABLE_HEALTH_CHECK=${ENABLE_HEALTH_CHECK:-true}
 EOF
+        fi
         chmod 600 "$env_file"
         log_success "Created runtime .env: ${env_file}"
     else
@@ -378,7 +360,15 @@ main() {
     prompt_configuration
     create_data_directory
     create_configuration
-    install_tailscale_stack
+
+    # Install Tailscale stack only if auth key is provided
+    if [[ -n "$TS_AUTHKEY" ]]; then
+        install_tailscale_stack
+    else
+        log_warn "TS_AUTHKEY not set: skipping Tailscale setup"
+        log_info "You can add Tailscale later by running: ./openclaw-manager-tailscale.sh start"
+    fi
+
     pull_docker_image
     
     if [[ "$ENABLE_SYSTEMD" == "true" ]]; then

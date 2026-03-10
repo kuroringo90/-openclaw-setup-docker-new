@@ -264,11 +264,58 @@ start_openclaw() {
         log_warn "OpenClaw avviato ma healthcheck HTTP non ancora pronto"
     fi
 
-    if [[ -n "$(get_env_value "${ENV_FILE}" TS_AUTHKEY)" ]]; then
-        log_info "Avvio stack Tailscale standalone..."
-        tailscale_runtime_cmd start openclaw "${DEFAULT_OPENCLAW_PORT}" /
+    # Check Tailscale module and ask user
+    check_tailscale_and_ask
+}
+
+check_tailscale_and_ask() {
+    local ts_available=false
+    local ts_running=false
+    
+    # Check if Tailscale module exists
+    if repo_tailscale_available; then
+        ts_available=true
+    fi
+    
+    # Check if Tailscale container is running
+    if runtime_tailscale_installed && docker ps --format '{{.Names}}' | grep -q "^${TS_CONTAINER_NAME}$"; then
+        ts_running=true
+    fi
+    
+    # Decide what to do
+    if [[ "$ts_running" == true ]]; then
+        # Tailscale is already running - ask to add OpenClaw as service
+        echo
+        log_info "Tailscale Funnel è già attivo (${TS_CONTAINER_NAME})"
+        read -rp "Vuoi aggiungere OpenClaw come servizio su '/'? (y/n): " add_ts
+        if [[ "$add_ts" == "y" || "$add_ts" == "Y" ]]; then
+            ensure_tailscale_runtime
+            sync_openclaw_env_to_tailscale
+            tailscale_runtime_cmd start openclaw "${DEFAULT_OPENCLAW_PORT}" /
+        fi
+    elif [[ "$ts_available" == true ]]; then
+        # Tailscale module exists but not running - ask to start
+        echo
+        log_info "Modulo Tailscale Funnel disponibile ma non attivo"
+        read -rp "Vuoi avviare Tailscale Funnel ed esporre OpenClaw? (y/n): " start_ts
+        if [[ "$start_ts" == "y" || "$start_ts" == "Y" ]]; then
+            # Check if TS_AUTHKEY is configured
+            local authkey
+            authkey="$(get_env_value "${ENV_FILE}" TS_AUTHKEY)"
+            if [[ -z "$authkey" ]]; then
+                log_error "TS_AUTHKEY non configurata in ${ENV_FILE}"
+                log_info "Impostala in ${SCRIPT_DIR}/.env e riprova"
+                return 0
+            fi
+            ensure_tailscale_runtime
+            sync_openclaw_env_to_tailscale
+            tailscale_runtime_cmd start openclaw "${DEFAULT_OPENCLAW_PORT}" /
+        fi
     else
-        log_warn "TS_AUTHKEY non configurata: salto bootstrap Tailscale"
+        # No Tailscale module - just inform user
+        echo
+        log_warn "Modulo Tailscale non trovato: OpenClaw accessibile solo in locale"
+        log_info "Per abilitare accesso remoto, copia il modulo tailscale-funnel-compose/"
     fi
 }
 
