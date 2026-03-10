@@ -1,0 +1,23 @@
+services:
+  tailscale-funnel:
+    image: tailscale/tailscale:latest
+    container_name: ${TS_CONTAINER_NAME:-tailscale-funnel}
+    hostname: ${TS_HOSTNAME:-tailscale-funnel}
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_EXTRA_ARGS: --state=/var/lib/tailscale/tailscaled.state
+    volumes:
+      - ./state:/var/lib/tailscale
+      - ./config:/config
+    command: tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state
+    healthcheck:
+      test: ["CMD-SHELL", "tailscale status >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
