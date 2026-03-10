@@ -10,6 +10,14 @@ PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TS_STACK_DIR="${PACKAGE_ROOT}/tailscale-funnel-compose"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 
+# Load default configuration from .env if exists
+DEFAULT_ENV="${SCRIPT_DIR}/.env"
+if [[ -f "$DEFAULT_ENV" ]]; then
+    set -a
+    source "$DEFAULT_ENV"
+    set +a
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,7 +32,7 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_step() { echo -e "${CYAN}[STEP]${NC} $*"; }
 
-# Deployment configuration
+# Deployment configuration (can be overridden by env vars)
 TS_AUTHKEY="${TS_AUTHKEY:-}"
 TS_API_KEY="${TS_API_KEY:-}"
 TS_TAILNET="${TS_TAILNET:-}"
@@ -104,30 +112,36 @@ check_prerequisites() {
 prompt_configuration() {
     log_step "Configuration"
     echo
-    
-    # TS_AUTHKEY
+
+    # Check if TS_AUTHKEY is set
     if [[ -z "$TS_AUTHKEY" ]]; then
         echo -e "${YELLOW}Tailscale Auth Key (TS_AUTHKEY)${NC}"
         echo "Get it from: https://login.tailscale.com/admin/settings/keys"
         echo "Recommended: Create a pre-authenticated key with limited lifetime"
         read -rp "Enter TS_AUTHKEY: " TS_AUTHKEY
         echo
+    else
+        log_success "TS_AUTHKEY: configured"
     fi
-    
-    # TS_API_KEY
+
+    # TS_API_KEY (optional)
     if [[ -z "$TS_API_KEY" ]]; then
         echo -e "${YELLOW}Tailscale API Key (TS_API_KEY)${NC}"
         echo "Optional but recommended for automatic duplicate node cleanup"
         read -rp "Enter TS_API_KEY (or press Enter to skip): " TS_API_KEY
         echo
+    else
+        log_success "TS_API_KEY: configured"
     fi
-    
-    # TS_TAILNET
+
+    # TS_TAILNET (optional - auto-detected)
     if [[ -z "$TS_TAILNET" ]]; then
         read -rp "Enter your Tailnet name (or press Enter to auto-detect): " TS_TAILNET
         echo
+    else
+        log_success "TS_TAILNET: ${TS_TAILNET}"
     fi
-    
+
     # Systemd
     if [[ "$ENABLE_SYSTEMD" != "true" ]]; then
         read -rp "Enable systemd auto-start? (y/n): " enable_systemd
@@ -159,38 +173,37 @@ create_data_directory() {
 }
 
 create_configuration() {
-    log_step "Creating configuration files..."
+    log_step "Creating runtime configuration..."
 
-    # Create OpenClaw .env file
+    # Create OpenClaw .env file in runtime directory
     local env_file="${DATA_DIR}/.env"
     if [[ ! -f "$env_file" ]]; then
         cat > "$env_file" <<EOF
-# OpenClaw + Tailscale Production Configuration
+# OpenClaw + Tailscale Runtime Configuration
 # Generated on $(date -Iseconds)
+# DO NOT EDIT - changes will be overwritten
+# Edit ${SCRIPT_DIR}/.env instead
 
-# OpenClaw settings
-OPENCLAW_CONTAINER_NAME=openclaw
-OPENCLAW_IMAGE_NAME=ghcr.io/openclaw/openclaw:latest
+OPENCLAW_CONTAINER_NAME=${OPENCLAW_CONTAINER_NAME}
+OPENCLAW_IMAGE_NAME=${OPENCLAW_IMAGE_NAME}
 OPENCLAW_DATA_DIR=${DATA_DIR}
-OPENCLAW_PORT=18789
-OPENCLAW_BIND_ADDRESS=127.0.0.1
+OPENCLAW_PORT=${OPENCLAW_PORT}
+OPENCLAW_BIND_ADDRESS=${OPENCLAW_BIND_ADDRESS}
 
-# Tailscale settings
 TS_AUTHKEY=${TS_AUTHKEY}
 TS_API_KEY=${TS_API_KEY}
 TS_TAILNET=${TS_TAILNET}
-TS_HOSTNAME=openclaw-funnel
-TS_CONTAINER_NAME=tailscale-funnel
-TS_ENABLE_FUNNEL=true
+TS_HOSTNAME=${TS_HOSTNAME}
+TS_CONTAINER_NAME=${TS_CONTAINER_NAME}
+TS_ENABLE_FUNNEL=${TS_ENABLE_FUNNEL}
 
-# Monitoring
-LOG_LEVEL=info
-ENABLE_HEALTH_CHECK=true
+LOG_LEVEL=${LOG_LEVEL:-info}
+ENABLE_HEALTH_CHECK=${ENABLE_HEALTH_CHECK:-true}
 EOF
         chmod 600 "$env_file"
-        log_success "Created OpenClaw .env file: ${env_file}"
+        log_success "Created runtime .env: ${env_file}"
     else
-        log_warn "OpenClaw .env file already exists, skipping"
+        log_warn "Runtime .env already exists, skipping"
     fi
 
     # Copy docker-compose template
@@ -207,38 +220,38 @@ EOF
 
 install_tailscale_stack() {
     log_step "Installing Tailscale Funnel stack..."
-    
+
     local ts_stack_dir="${DATA_DIR}/tailscale-funnel"
     local repo_ts_dir="${PACKAGE_ROOT}/tailscale-funnel-compose"
-    
+
     mkdir -p "${ts_stack_dir}/state"
     mkdir -p "${ts_stack_dir}/config"
-    
+
     # Copy files from repo
     cp -f "${repo_ts_dir}/docker-compose.yml" "${ts_stack_dir}/"
     cp -f "${repo_ts_dir}/.env.example" "${ts_stack_dir}/.env.example"
     cp -f "${repo_ts_dir}/tailscale-funnel-compose.sh" "${ts_stack_dir}/"
     chmod +x "${ts_stack_dir}/tailscale-funnel-compose.sh"
-    
-    # Create .env for Tailscale
+
+    # Create .env for Tailscale with OpenClaw-specific settings
     cat > "${ts_stack_dir}/.env" <<EOF
-# Tailscale Funnel Configuration
+# Tailscale Funnel Configuration for OpenClaw
 # Generated on $(date -Iseconds)
 
 TS_AUTHKEY=${TS_AUTHKEY}
 TS_API_KEY=${TS_API_KEY}
 TS_TAILNET=${TS_TAILNET}
-TS_HOSTNAME=openclaw-funnel
-TS_CONTAINER_NAME=tailscale-funnel
+TS_HOSTNAME=${TS_HOSTNAME}
+TS_CONTAINER_NAME=${TS_CONTAINER_NAME}
 
 TS_DEFAULT_SERVICE_NAME=openclaw
-TS_DEFAULT_SERVICE_PORT=18789
+TS_DEFAULT_SERVICE_PORT=${OPENCLAW_PORT}
 TS_DEFAULT_SERVICE_PATH=/
 
-TS_LOG_LEVEL=info
+TS_LOG_LEVEL=${LOG_LEVEL:-info}
 EOF
     chmod 600 "${ts_stack_dir}/.env"
-    
+
     log_success "Tailscale stack installed"
     echo
 }
