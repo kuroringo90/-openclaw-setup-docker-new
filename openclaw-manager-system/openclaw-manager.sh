@@ -134,7 +134,7 @@ start_openclaw() {
     log_info "OpenClaw è accessibile in locale su: http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}"
     log_info "Per abilitare accesso remoto con Tailscale Funnel:"
     log_info "  1. Configura il modulo tailscale-funnel-compose/"
-    log_info "  2. Esegui: ./openclaw-manager-tailscale.sh tailscale-add"
+    log_info "  2. Esegui: ./openclaw-manager.sh tailscale-add"
 }
 
 stop_openclaw() {

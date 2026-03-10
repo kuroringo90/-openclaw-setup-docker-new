@@ -30,13 +30,13 @@ nano .env
 ./deploy.sh
 
 # 4. Start OpenClaw (will ask about Tailscale)
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 
 # 5. Access locally
 curl http://127.0.0.1:18789/
 
 # 6. Get your secure URL (if Tailscale was enabled)
-./openclaw-manager-tailscale.sh tunnel-url
+./openclaw-manager.sh tunnel-url
 ```
 
 ---
@@ -111,7 +111,7 @@ Script specifici per OpenClaw che consumano il modulo Tailscale.
 | Script | Purpose |
 |--------|---------|
 | `deploy.sh` | Automated production deployment |
-| `openclaw-manager-tailscale.sh` | Main orchestration script |
+| `openclaw-manager.sh` | Main orchestration script |
 | `tailscale-add-service.sh` | Legacy compatibility wrapper |
 
 ---
@@ -156,20 +156,20 @@ cd openclaw-manager-system
 
 ```bash
 # Start all services
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 
 # Stop all services
-./openclaw-manager-tailscale.sh stop
+./openclaw-manager.sh stop
 
 # Restart
-./openclaw-manager-tailscale.sh restart
+./openclaw-manager.sh restart
 ```
 
 ### Status & Monitoring
 
 ```bash
 # Full status (OpenClaw + Tailscale)
-./openclaw-manager-tailscale.sh status-full
+./openclaw-manager.sh status-full
 
 # Health check (for monitoring)
 ./health-check.sh
@@ -201,13 +201,13 @@ cd openclaw-manager-system
 
 ```bash
 # Add Grafana on /grafana
-./openclaw-manager-tailscale.sh tailscale-add grafana 3000 /grafana
+./openclaw-manager.sh tailscale-add grafana 3000 /grafana
 
 # Add Uptime Kuma on /uptime
-./openclaw-manager-tailscale.sh tailscale-add uptime 3001 /uptime
+./openclaw-manager.sh tailscale-add uptime 3001 /uptime
 
 # View status
-./openclaw-manager-tailscale.sh status-full
+./openclaw-manager.sh status-full
 ```
 
 ---
@@ -275,7 +275,7 @@ Enable automatic start on boot:
 
 ```bash
 # Install service (requires sudo)
-sudo ./openclaw-manager-tailscale.sh systemd-install
+sudo ./openclaw-manager.sh systemd-install
 
 # Or manually
 sudo cp openclaw.service /etc/systemd/system/

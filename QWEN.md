@@ -9,7 +9,7 @@ This repository provides a **Docker-based deployment system for OpenClaw** with 
 ```
 openclaw-tailscale-qwen-branch-separated/
 ├── openclaw-manager-system/          # OpenClaw-specific logic and wrappers
-│   ├── openclaw-manager-tailscale.sh # Main orchestration script
+│   ├── openclaw-manager.sh # Main orchestration script
 │   ├── tailscale-add-service.sh      # Legacy compatibility wrapper
 │   ├── docker-compose.openclaw.example.yml
 │   ├── README-WRAPPER.md
@@ -59,7 +59,7 @@ openclaw-tailscale-qwen-branch-separated/
 
 ```bash
 # 1. Make scripts executable
-chmod +x openclaw-manager-system/openclaw-manager-tailscale.sh \
+chmod +x openclaw-manager-system/openclaw-manager.sh \
          openclaw-manager-system/tailscale-add-service.sh \
          tailscale-funnel-compose/tailscale-funnel-compose.sh
 
@@ -69,18 +69,18 @@ nano tailscale-funnel-compose/.env
 
 # 3. Start OpenClaw + Tailscale
 cd openclaw-manager-system
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 
 # 4. Check status
-./openclaw-manager-tailscale.sh status-full
+./openclaw-manager.sh status-full
 
 # 5. Get Funnel URL
-./openclaw-manager-tailscale.sh tunnel-url
+./openclaw-manager.sh tunnel-url
 ```
 
 ### Available Commands
 
-#### OpenClaw Manager (`openclaw-manager-tailscale.sh`)
+#### OpenClaw Manager (`openclaw-manager.sh`)
 
 | Command | Description |
 |---------|-------------|
@@ -113,10 +113,10 @@ cd openclaw-manager-system
 
 ```bash
 # Add Grafana on /grafana
-./openclaw-manager-tailscale.sh tailscale-add grafana 3000 /grafana
+./openclaw-manager.sh tailscale-add grafana 3000 /grafana
 
 # Add Uptime Kuma on /uptime
-./openclaw-manager-tailscale.sh tailscale-add uptime 3001 /uptime
+./openclaw-manager.sh tailscale-add uptime 3001 /uptime
 ```
 
 ## Environment Configuration
@@ -164,7 +164,7 @@ To use the OpenClaw manager outside this package structure:
 
 ```bash
 export REPO_TS_STACK_DIR=/path/to/tailscale-funnel-compose
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 ```
 
 ## Testing
@@ -172,10 +172,10 @@ export REPO_TS_STACK_DIR=/path/to/tailscale-funnel-compose
 ```bash
 # Full workflow test
 cd openclaw-manager-system
-./openclaw-manager-tailscale.sh start
-./openclaw-manager-tailscale.sh tailscale-add grafana 3000 /grafana
-./openclaw-manager-tailscale.sh status-full
-./openclaw-manager-tailscale.sh tunnel-url
+./openclaw-manager.sh start
+./openclaw-manager.sh tailscale-add grafana 3000 /grafana
+./openclaw-manager.sh status-full
+./openclaw-manager.sh tunnel-url
 ```
 
 ## Troubleshooting

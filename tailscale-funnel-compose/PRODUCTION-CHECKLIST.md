@@ -48,7 +48,7 @@ Use this checklist before deploying to production.
 
 ### Initial Start
 
-- [ ] Services started with `./openclaw-manager-tailscale.sh start`
+- [ ] Services started with `./openclaw-manager.sh start`
 - [ ] Health check passes: `./health-check.sh`
 - [ ] Funnel URL accessible
 - [ ] OpenClaw UI loads correctly

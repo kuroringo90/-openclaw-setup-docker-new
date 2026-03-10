@@ -161,7 +161,7 @@ echo "TS_AUTHKEY=$TS_AUTHKEY" >> debug.log
    # Generate new key
    # Update .env
    # Restart services
-   ./openclaw-manager-tailscale.sh restart
+   ./openclaw-manager.sh restart
    # Verify old key is revoked
    ```
 
@@ -282,7 +282,7 @@ docker pull ghcr.io/openclaw/openclaw:latest
 docker pull tailscale/tailscale:latest
 
 # Update running containers
-./openclaw-manager-tailscale.sh restart
+./openclaw-manager.sh restart
 ```
 
 ### Tailscale Client

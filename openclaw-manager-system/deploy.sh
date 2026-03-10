@@ -181,7 +181,7 @@ setup_systemd() {
     # Check if running as root or with sudo
     if [[ $EUID -ne 0 ]]; then
         log_warn "Systemd setup requires root privileges"
-        log_info "To enable auto-start, run: sudo ${SCRIPT_DIR}/openclaw-manager-tailscale.sh systemd-install"
+        log_info "To enable auto-start, run: sudo ${SCRIPT_DIR}/openclaw-manager.sh systemd-install"
         return
     fi
     
@@ -229,10 +229,10 @@ print_next_steps() {
     echo
     echo "  1. Start OpenClaw:"
     echo -e "     ${CYAN}cd ${SCRIPT_DIR}${NC}"
-    echo -e "     ${CYAN}./openclaw-manager-tailscale.sh start${NC}"
+    echo -e "     ${CYAN}./openclaw-manager.sh start${NC}"
     echo
     echo "  2. Check status:"
-    echo -e "     ${CYAN}./openclaw-manager-tailscale.sh status${NC}"
+    echo -e "     ${CYAN}./openclaw-manager.sh status${NC}"
     echo
     echo "  3. Access locally:"
     echo -e "     ${CYAN}http://127.0.0.1:${OPENCLAW_PORT}${NC}"

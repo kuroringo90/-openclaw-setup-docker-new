@@ -2,7 +2,7 @@
 
 ## Cosa cambia
 
-- `openclaw-manager-tailscale.sh` non crea più il sidecar Tailscale con `docker run`.
+- `openclaw-manager.sh` non crea più il sidecar Tailscale con `docker run`.
 - Ora installa e usa lo stack standalone in `~/.openclaw/tailscale-funnel`.
 - I file sorgente dello stack vengono presi dalla cartella repo `tailscale-funnel-compose/`.
 
@@ -19,7 +19,7 @@
 ## Flusso operativo
 
 ```bash
-./openclaw-manager-tailscale.sh start
-./openclaw-manager-tailscale.sh tailscale-add grafana 3000 /grafana
-./openclaw-manager-tailscale.sh status-full
+./openclaw-manager.sh start
+./openclaw-manager.sh tailscale-add grafana 3000 /grafana
+./openclaw-manager.sh status-full
 ```

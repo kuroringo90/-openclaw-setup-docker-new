@@ -10,11 +10,11 @@ This runbook provides operational procedures for managing OpenClaw with Tailscal
 
 | Task | Command |
 |------|---------|
-| Start services | `./openclaw-manager-tailscale.sh start` |
-| Stop services | `./openclaw-manager-tailscale.sh stop` |
-| Check status | `./openclaw-manager-tailscale.sh status-full` |
+| Start services | `./openclaw-manager.sh start` |
+| Stop services | `./openclaw-manager.sh stop` |
+| Check status | `./openclaw-manager.sh status-full` |
 | Health check | `./health-check.sh` |
-| Get Funnel URL | `./openclaw-manager-tailscale.sh tunnel-url` |
+| Get Funnel URL | `./openclaw-manager.sh tunnel-url` |
 | View logs | `docker logs -f openclaw` |
 | Backup | `./backup.sh backup` |
 | Restore | `./backup.sh restore <file>` |
@@ -40,7 +40,7 @@ This runbook provides operational procedures for managing OpenClaw with Tailscal
 
 ### Scenario 1: Service Won't Start
 
-**Symptoms:** `./openclaw-manager-tailscale.sh start` fails
+**Symptoms:** `./openclaw-manager.sh start` fails
 
 **Diagnosis:**
 ```bash
@@ -63,7 +63,7 @@ sudo lsof -ti:18789 | xargs kill -9
 docker rm -f openclaw 2>/dev/null || true
 
 # Try starting again
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 ```
 
 ---
@@ -150,7 +150,7 @@ docker inspect openclaw --format '{{.State.ExitCode}}'
 **Resolution:**
 ```bash
 # Stop the container
-./openclaw-manager-tailscale.sh stop
+./openclaw-manager.sh stop
 
 # Check configuration
 ./validate-config.sh
@@ -158,7 +158,7 @@ docker inspect openclaw --format '{{.State.ExitCode}}'
 # Fix any issues found
 
 # Start again
-./openclaw-manager-tailscale.sh start
+./openclaw-manager.sh start
 ```
 
 ---
@@ -182,7 +182,7 @@ docker exec tailscale-funnel tailscale funnel status
 **Resolution:**
 ```bash
 # Reconfigure routing
-./openclaw-manager-tailscale.sh tailscale-config
+./openclaw-manager.sh tailscale-config
 
 # Wait 30 seconds and test again
 sleep 30
@@ -198,7 +198,7 @@ curl -v https://<your-funnel-url>
 - [ ] Review error logs: `docker logs --since 24h openclaw | grep -i error`
 
 ### Weekly
-- [ ] Run full status check: `./openclaw-manager-tailscale.sh status-full`
+- [ ] Run full status check: `./openclaw-manager.sh status-full`
 - [ ] Verify backup integrity: `./backup.sh verify <latest-backup>`
 - [ ] Check disk usage: `df -h ~/.openclaw`
 
@@ -227,14 +227,14 @@ curl -v https://<your-funnel-url>
 
 3. **Restart services:**
    ```bash
-   ./openclaw-manager-tailscale.sh restart
+   ./openclaw-manager.sh restart
    ```
 
 4. **If still failing, restore from backup:**
    ```bash
    ./backup.sh list
    ./backup.sh restore ~/.openclaw/backups/openclaw-backup-YYYYMMDD_HHMMSS.tar.gz
-   ./openclaw-manager-tailscale.sh start
+   ./openclaw-manager.sh start
    ```
 
 ---

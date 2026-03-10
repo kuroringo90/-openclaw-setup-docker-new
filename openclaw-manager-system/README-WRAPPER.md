@@ -25,5 +25,5 @@ Questa versione è un wrapper compatibile con il nuovo stack standalone Compose-
 Dopo un `remove` senza argomenti, per ripristinare OpenClaw su `/` esegui:
 
 ```bash
-./openclaw-manager-tailscale.sh tailscale-config
+./openclaw-manager.sh tailscale-config
 ```

@@ -17,8 +17,8 @@ Environment="HOME=/root"
 WorkingDirectory=/opt/openclaw-manager-system
 
 # Executable script path
-ExecStart=/opt/openclaw-manager-system/openclaw-manager-tailscale.sh start
-ExecStop=/opt/openclaw-manager-system/openclaw-manager-tailscale.sh stop
+ExecStart=/opt/openclaw-manager-system/openclaw-manager.sh start
+ExecStop=/opt/openclaw-manager-system/openclaw-manager.sh stop
 ExecReload=/bin/true
 
 # Security hardening

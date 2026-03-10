@@ -3,7 +3,7 @@ QWEN.MD
 openclaw-manager-system/MIGRATION.md
 openclaw-manager-system/README-WRAPPER.md
 openclaw-manager-system/docker-compose.openclaw.example.yml
-openclaw-manager-system/openclaw-manager-tailscale.sh
+openclaw-manager-system/openclaw-manager.sh
 openclaw-manager-system/tailscale-add-service.sh
 tailscale-funnel-compose/.env.example
 tailscale-funnel-compose/DEPENDENCY.md
