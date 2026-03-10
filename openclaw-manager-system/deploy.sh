@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 #
-# Production deployment script for OpenClaw + Tailscale
-# Automates installation, configuration, and initial setup
+# Production deployment script for OpenClaw
+# Deploya solo OpenClaw - Tailscale è un modulo separato opzionale
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TS_STACK_DIR="${PACKAGE_ROOT}/tailscale-funnel-compose"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 
 # Load default configuration from .env if exists
@@ -32,13 +31,6 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_step() { echo -e "${CYAN}[STEP]${NC} $*"; }
 
-# Deployment configuration (can be overridden by env vars)
-TS_AUTHKEY="${TS_AUTHKEY:-}"
-TS_API_KEY="${TS_API_KEY:-}"
-TS_TAILNET="${TS_TAILNET:-}"
-ENABLE_SYSTEMD="${ENABLE_SYSTEMD:-false}"
-BACKUP_ENABLED="${BACKUP_ENABLED:-true}"
-
 print_banner() {
     cat <<'EOF'
  _____  ____   ____  _     _____ _____ ____  _____ 
@@ -47,7 +39,7 @@ print_banner() {
 | |_| ||  __/| |___ | |___| |___| |___|  _ <| |___ 
 |_____||_|    \____||_____|_____|_____|_| \_\_____|
                                                     
-           PRODUCTION DEPLOYMENT SCRIPT
+           OPENCLAW DEPLOYMENT
 EOF
     echo
 }
@@ -112,22 +104,13 @@ check_prerequisites() {
 prompt_configuration() {
     log_step "Configuration"
     echo
-
-    # Check if TS_AUTHKEY is set (optional)
-    if [[ -z "$TS_AUTHKEY" ]]; then
-        echo -e "${YELLOW}Tailscale Integration (optional)${NC}"
-        echo "Leave empty to run OpenClaw locally without Tailscale"
-        echo "Get auth key from: https://login.tailscale.com/admin/settings/keys"
-        read -rp "Enter TS_AUTHKEY (or press Enter to skip): " TS_AUTHKEY
-        if [[ -n "$TS_AUTHKEY" ]]; then
-            # Ask for API key only if auth key is set
-            read -rp "Enter TS_API_KEY (optional, for cleanup): " TS_API_KEY
-            read -rp "Enter Tailnet name (or press Enter to auto-detect): " TS_TAILNET
-        fi
-        echo
-    else
-        log_success "TS_AUTHKEY: configured (Tailscale will be available)"
-    fi
+    log_info "Using default configuration from ${DEFAULT_ENV}"
+    log_info "OpenClaw will be accessible locally on http://127.0.0.1:${OPENCLAW_PORT}"
+    echo
+    log_info "To enable remote access with Tailscale Funnel:"
+    log_info "  1. Configure tailscale-funnel-compose/ module"
+    log_info "  2. Run: ./tailscale-add-service.sh add"
+    echo
 }
 
 create_data_directory() {
@@ -170,18 +153,6 @@ OPENCLAW_BIND_ADDRESS=${OPENCLAW_BIND_ADDRESS}
 LOG_LEVEL=${LOG_LEVEL:-info}
 ENABLE_HEALTH_CHECK=${ENABLE_HEALTH_CHECK:-true}
 EOF
-        # Add Tailscale vars only if configured
-        if [[ -n "$TS_AUTHKEY" ]]; then
-            cat >> "$env_file" <<EOF
-
-# Tailscale configuration
-TS_AUTHKEY=${TS_AUTHKEY}
-TS_API_KEY=${TS_API_KEY}
-TS_TAILNET=${TS_TAILNET}
-TS_HOSTNAME=${TS_HOSTNAME}
-TS_CONTAINER_NAME=${TS_CONTAINER_NAME}
-EOF
-        fi
         chmod 600 "$env_file"
         log_success "Created runtime .env: ${env_file}"
     else
@@ -197,44 +168,6 @@ EOF
         log_warn "docker-compose.yml already exists, skipping"
     fi
 
-    echo
-}
-
-install_tailscale_stack() {
-    log_step "Installing Tailscale Funnel stack..."
-
-    local ts_stack_dir="${DATA_DIR}/tailscale-funnel"
-    local repo_ts_dir="${PACKAGE_ROOT}/tailscale-funnel-compose"
-
-    mkdir -p "${ts_stack_dir}/state"
-    mkdir -p "${ts_stack_dir}/config"
-
-    # Copy files from repo
-    cp -f "${repo_ts_dir}/docker-compose.yml" "${ts_stack_dir}/"
-    cp -f "${repo_ts_dir}/.env.example" "${ts_stack_dir}/.env.example"
-    cp -f "${repo_ts_dir}/tailscale-funnel-compose.sh" "${ts_stack_dir}/"
-    chmod +x "${ts_stack_dir}/tailscale-funnel-compose.sh"
-
-    # Create .env for Tailscale with OpenClaw-specific settings
-    cat > "${ts_stack_dir}/.env" <<EOF
-# Tailscale Funnel Configuration for OpenClaw
-# Generated on $(date -Iseconds)
-
-TS_AUTHKEY=${TS_AUTHKEY}
-TS_API_KEY=${TS_API_KEY}
-TS_TAILNET=${TS_TAILNET}
-TS_HOSTNAME=${TS_HOSTNAME}
-TS_CONTAINER_NAME=${TS_CONTAINER_NAME}
-
-TS_DEFAULT_SERVICE_NAME=openclaw
-TS_DEFAULT_SERVICE_PORT=${OPENCLAW_PORT}
-TS_DEFAULT_SERVICE_PATH=/
-
-TS_LOG_LEVEL=${LOG_LEVEL:-info}
-EOF
-    chmod 600 "${ts_stack_dir}/.env"
-
-    log_success "Tailscale stack installed"
     echo
 }
 
@@ -268,56 +201,19 @@ setup_systemd() {
     echo
 }
 
-setup_backup_cron() {
-    if [[ "$BACKUP_ENABLED" != "true" ]]; then
-        return
-    fi
-
-    log_step "Setting up automatic backups..."
-
-    # Create backup script symlink from Tailscale stack
-    local backup_script="${DATA_DIR}/backup.sh"
-    if [[ ! -f "$backup_script" ]]; then
-        cp "${TS_STACK_DIR}/backup.sh" "$backup_script"
-        chmod +x "$backup_script"
-    fi
-
-    # Suggest cron job
-    log_info "To enable daily backups at 3 AM, add this crontab entry:"
-    echo "  0 3 * * * ${backup_script} backup"
-    echo
-
-    # Create initial backup
-    read -rp "Create initial backup now? (y/n): " create_backup
-    if [[ "$create_backup" == "y" || "$create_backup" == "Y" ]]; then
-        "$backup_script" backup
-    fi
-    echo
-}
-
 pull_docker_image() {
     log_step "Pulling Docker image..."
-    
+
     local image_name="ghcr.io/openclaw/openclaw:latest"
-    
+
     if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${image_name}$"; then
         log_info "Image already exists, checking for updates..."
         docker pull "$image_name" || log_warn "Failed to pull latest image"
     else
         docker pull "$image_name"
     fi
-    
+
     log_success "Docker image ready"
-    echo
-}
-
-run_health_check() {
-    log_step "Running health check..."
-
-    if [[ -f "${TS_STACK_DIR}/health-check.sh" ]]; then
-        "${TS_STACK_DIR}/health-check.sh" --quiet || true
-    fi
-
     echo
 }
 
@@ -327,29 +223,25 @@ print_next_steps() {
     echo "         DEPLOYMENT COMPLETE!              "
     echo "============================================"
     echo
-    echo -e "${GREEN}OpenClaw is ready to start!${NC}"
+    echo -e "${GREEN}OpenClaw is ready to deploy!${NC}"
     echo
     echo "Next steps:"
     echo
-    echo "  1. Start the services:"
+    echo "  1. Start OpenClaw:"
     echo -e "     ${CYAN}cd ${SCRIPT_DIR}${NC}"
     echo -e "     ${CYAN}./openclaw-manager-tailscale.sh start${NC}"
     echo
     echo "  2. Check status:"
-    echo -e "     ${CYAN}./openclaw-manager-tailscale.sh status-full${NC}"
+    echo -e "     ${CYAN}./openclaw-manager-tailscale.sh status${NC}"
     echo
-    echo "  3. Get your Funnel URL:"
-    echo -e "     ${CYAN}./openclaw-manager-tailscale.sh tunnel-url${NC}"
+    echo "  3. Access locally:"
+    echo -e "     ${CYAN}http://127.0.0.1:${OPENCLAW_PORT}${NC}"
     echo
-    echo "  4. Monitor health:"
-    echo -e "     ${CYAN}./health-check.sh${NC}"
+    echo "  4. Enable remote access (optional):"
+    echo -e "     ${CYAN}./tailscale-add-service.sh add${NC}"
     echo
     echo "Documentation:"
-    echo "  - README: ${PACKAGE_ROOT}/QWEN.md"
-    echo "  - Migration guide: ${SCRIPT_DIR}/MIGRATION.md"
-    echo
-    echo "Support:"
-    echo "  - GitHub: https://github.com/kuroringo90/-openclaw-setup-docker-new"
+    echo "  - README: ${PACKAGE_ROOT}/README.md"
     echo
 }
 
@@ -360,84 +252,42 @@ main() {
     prompt_configuration
     create_data_directory
     create_configuration
-
-    # Install Tailscale stack only if auth key is provided
-    if [[ -n "$TS_AUTHKEY" ]]; then
-        install_tailscale_stack
-    else
-        log_warn "TS_AUTHKEY not set: skipping Tailscale setup"
-        log_info "You can add Tailscale later by running: ./openclaw-manager-tailscale.sh start"
-    fi
-
     pull_docker_image
     
     if [[ "$ENABLE_SYSTEMD" == "true" ]]; then
         setup_systemd
     fi
     
-    setup_backup_cron
-    run_health_check
     print_next_steps
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --authkey)
-            TS_AUTHKEY="$2"
-            shift 2
-            ;;
-        --api-key)
-            TS_API_KEY="$2"
-            shift 2
-            ;;
-        --tailnet)
-            TS_TAILNET="$2"
-            shift 2
-            ;;
         --systemd)
             ENABLE_SYSTEMD=true
-            shift
-            ;;
-        --no-backup)
-            BACKUP_ENABLED=false
-            shift
-            ;;
-        --non-interactive)
-            # For CI/CD usage - requires env vars to be set
-            if [[ -z "$TS_AUTHKEY" ]]; then
-                log_error "TS_AUTHKEY required for non-interactive mode"
-                exit 1
-            fi
             shift
             ;;
         -h|--help)
             cat <<EOF
 Usage: $0 [options]
 
-Production deployment script for OpenClaw + Tailscale.
+Production deployment script for OpenClaw.
+Tailscale Funnel is a separate optional module.
 
 Options:
-  --authkey <key>       Tailscale auth key (required for non-interactive)
-  --api-key <key>       Tailscale API key (optional)
-  --tailnet <name>      Tailnet name (optional, auto-detected)
   --systemd             Enable systemd auto-start
-  --no-backup           Skip backup setup
-  --non-interactive     Run without prompts (for CI/CD)
   -h, --help            Show this help
-
-Environment variables:
-  TS_AUTHKEY, TS_API_KEY, TS_TAILNET, OPENCLAW_DATA_DIR, ENABLE_SYSTEMD
 
 Examples:
   # Interactive deployment
   $0
   
-  # Non-interactive deployment
-  TS_AUTHKEY=tskey-xxx $0 --non-interactive
+  # With systemd auto-start
+  $0 --systemd
   
-  # Full automated deployment
-  $0 --authkey tskey-xxx --api-key api-xxx --systemd
+  # Non-interactive (uses .env defaults)
+  $0
 EOF
             exit 0
             ;;
