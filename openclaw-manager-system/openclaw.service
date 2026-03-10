@@ -1,0 +1,44 @@
+[Unit]
+Description=OpenClaw with Tailscale Funnel
+Documentation=https://github.com/kuroringo90/-openclaw-setup-docker-new
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Environment
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="HOME=/root"
+
+# Working directory
+WorkingDirectory=/opt/openclaw-manager-system
+
+# Executable script path
+ExecStart=/opt/openclaw-manager-system/openclaw-manager-tailscale.sh start
+ExecStop=/opt/openclaw-manager-system/openclaw-manager-tailscale.sh stop
+ExecReload=/bin/true
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Allow Docker access
+ReadWritePaths=/var/run/docker.sock /home/%h/.openclaw
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=openclaw
+
+[Install]
+WantedBy=multi-user.target

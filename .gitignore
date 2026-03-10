@@ -1,0 +1,50 @@
+# Environment files (contain secrets)
+.env
+*.env
+!*.env.example
+
+# Runtime data directories
+~/.openclaw/
+.openclaw/
+data/
+state/
+config/
+
+# Backup files
+backups/
+*.tar.gz
+*.tar.gz.sha256
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Node modules (if any)
+node_modules/
+
+# Build artifacts
+dist/
+build/
