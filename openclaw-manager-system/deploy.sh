@@ -160,8 +160,8 @@ create_data_directory() {
 
 create_configuration() {
     log_step "Creating configuration files..."
-    
-    # Create .env file
+
+    # Create OpenClaw .env file
     local env_file="${DATA_DIR}/.env"
     if [[ ! -f "$env_file" ]]; then
         cat > "$env_file" <<EOF
@@ -188,11 +188,11 @@ LOG_LEVEL=info
 ENABLE_HEALTH_CHECK=true
 EOF
         chmod 600 "$env_file"
-        log_success "Created .env file"
+        log_success "Created OpenClaw .env file: ${env_file}"
     else
-        log_warn ".env file already exists, skipping"
+        log_warn "OpenClaw .env file already exists, skipping"
     fi
-    
+
     # Copy docker-compose template
     local compose_file="${DATA_DIR}/docker-compose.yml"
     if [[ ! -f "$compose_file" ]]; then
@@ -201,7 +201,7 @@ EOF
     else
         log_warn "docker-compose.yml already exists, skipping"
     fi
-    
+
     echo
 }
 
