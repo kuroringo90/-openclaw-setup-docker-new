@@ -290,10 +290,12 @@ sudo systemctl start openclaw
 
 | Document | Purpose |
 |----------|---------|
-| [RUNBOOK.md](./RUNBOOK.md) | Operational procedures and troubleshooting |
-| [SECURITY.md](./SECURITY.md) | Security guide and hardening measures |
-| [MIGRATION.md](./MIGRATION.md) | Migration guide from previous versions |
-| [QWEN.md](../QWEN.md) | Project context and architecture |
+| **[ARCHITECTURE.md](./ARCHITECTURE.md)** | **Complete architecture and project structure** |
+| [RUNBOOK.md](./tailscale-funnel-compose/RUNBOOK.md) | Operational procedures and troubleshooting |
+| [SECURITY.md](./tailscale-funnel-compose/SECURITY.md) | Security guide and hardening measures |
+| [PRODUCTION-CHECKLIST.md](./tailscale-funnel-compose/PRODUCTION-CHECKLIST.md) | Production deployment checklist |
+| [MIGRATION.md](./openclaw-manager-system/MIGRATION.md) | Migration guide from previous versions |
+| [QWEN.md](./QWEN.md) | Project context and AI instructions |
 
 ---
 
