@@ -130,8 +130,8 @@ apply_service_route() {
   local target="$1" path="$2" exposure="$3"
   exposure="$(normalize_exposure_mode "$exposure")"
   case "$exposure" in
-    funnel) dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null ;;
-    serve) dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$target" >/dev/null ;;
+    funnel) dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" </dev/null >/dev/null ;;
+    serve) dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$target" </dev/null >/dev/null ;;
   esac
 }
 
@@ -298,11 +298,12 @@ add_service() {
 }
 
 rebuild_routes() {
-  dc exec -T "${SERVICE_NAME}" tailscale funnel reset >/dev/null 2>&1 || true
-  dc exec -T "${SERVICE_NAME}" tailscale serve reset >/dev/null 2>&1 || true
-  while IFS=$'\t' read -r name target path exposure; do
-    [[ -n "$name" ]] || continue
-    apply_service_route "$target" "$path" "${exposure:-funnel}"
+  local svc_name svc_target svc_path svc_exposure
+  dc exec -T "${SERVICE_NAME}" tailscale funnel reset </dev/null >/dev/null 2>&1 || true
+  dc exec -T "${SERVICE_NAME}" tailscale serve reset </dev/null >/dev/null 2>&1 || true
+  while IFS=$'\t' read -r svc_name svc_target svc_path svc_exposure; do
+    [[ -n "$svc_name" ]] || continue
+    apply_service_route "$svc_target" "$svc_path" "${svc_exposure:-funnel}"
   done < "$SERVICES_FILE"
 }
 
