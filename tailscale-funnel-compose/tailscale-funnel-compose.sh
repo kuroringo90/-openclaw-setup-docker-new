@@ -90,6 +90,20 @@ get_tailnet_name() {
   [[ -n "$dns" ]] && printf '%s\n' "$(printf '%s' "$dns" | cut -d'.' -f2)"
 }
 
+print_public_urls() {
+  local dns="$1"
+  [[ -n "$dns" ]] || return 0
+
+  if [[ -s "$SERVICES_FILE" ]]; then
+    while IFS=$'\t' read -r name target path; do
+      [[ -n "$name" && -n "$path" ]] || continue
+      echo "https://${dns}${path}"
+    done < "$SERVICES_FILE"
+  else
+    echo "https://${dns}"
+  fi
+}
+
 cleanup_duplicate_nodes_api() {
   local hostname="${TS_HOSTNAME:-tailscale-funnel}"
   local api_key="${TS_API_KEY:-}"
@@ -175,50 +189,49 @@ tailscale_up() {
 
 ensure_main_service() {
   local name="${1:-${TS_DEFAULT_SERVICE_NAME:-funnel}}"
-  local port="${2:-${TS_DEFAULT_SERVICE_PORT:-18789}}"
+  local target="${2:-${TS_DEFAULT_SERVICE_PORT:-18789}}"
   local path="${3:-${TS_DEFAULT_SERVICE_PATH:-/}}"
 
-  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
+  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
 
-  grep -Fq "$name	$port	$path" "$SERVICES_FILE" 2>/dev/null || echo -e "$name\t$port\t$path" >> "$SERVICES_FILE"
-  log_ok "Servizio principale configurato: ${name} -> ${port} (${path})"
+  grep -Fq "$name	$target	$path" "$SERVICES_FILE" 2>/dev/null || echo -e "$name\t$target\t$path" >> "$SERVICES_FILE"
+  log_ok "Servizio principale configurato: ${name} -> ${target} (${path})"
 }
 
 service_exists() {
-  local name="$1" port="$2" path="$3"
-  awk -F '\t' -v n="$name" -v p="$port" -v x="$path" '
-    $1==n || $2==p || $3==x { found=1 }
+  local name="$1" target="$2" path="$3"
+  awk -F '\t' -v n="$name" -v t="$target" -v x="$path" '
+    $1==n || $2==t || $3==x { found=1 }
     END { exit found ? 0 : 1 }
   ' "$SERVICES_FILE"
 }
 
 add_service() {
-  local name="${1:-}" port="${2:-}" path="${3:-}"
-  [[ -n "$name" && -n "$port" ]] || { log_err "Uso: $0 add <name> <port> [path]"; exit 1; }
-  [[ "$port" =~ ^[0-9]+$ ]] || { log_err "Porta non valida: $port"; exit 1; }
+  local name="${1:-}" target="${2:-}" path="${3:-}"
+  [[ -n "$name" && -n "$target" ]] || { log_err "Uso: $0 add <name> <port|target> [path]"; exit 1; }
   path="${path:-/$name}"
   [[ "$path" == /* ]] || { log_err "Il path deve iniziare con /"; exit 1; }
 
-  if service_exists "$name" "$port" "$path"; then
+  if service_exists "$name" "$target" "$path"; then
     log_err "Duplicato rilevato: nome, porta o path già presente"
-    awk -F '\t' -v n="$name" -v p="$port" -v x="$path" '$1==n || $2==p || $3==x {print "  - "$1"\tporta=" $2 "\tpath=" $3}' "$SERVICES_FILE"
+    awk -F '\t' -v n="$name" -v t="$target" -v x="$path" '$1==n || $2==t || $3==x {print "  - "$1"\ttarget=" $2 "\tpath=" $3}' "$SERVICES_FILE"
     exit 1
   fi
 
-  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
-  echo -e "$name\t$port\t$path" >> "$SERVICES_FILE"
+  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
+  echo -e "$name\t$target\t$path" >> "$SERVICES_FILE"
 
   local dns
   dns="$(get_dns_name)"
-  log_ok "Servizio aggiunto: ${name} -> ${port} (${path})"
+  log_ok "Servizio aggiunto: ${name} -> ${target} (${path})"
   [[ -n "$dns" ]] && echo -e "${GREEN}URL:${NC} https://${dns}${path}"
 }
 
 rebuild_routes() {
   dc exec -T "${SERVICE_NAME}" tailscale funnel reset >/dev/null 2>&1 || true
-  while IFS=$'\t' read -r name port path; do
+  while IFS=$'\t' read -r name target path; do
     [[ -n "$name" ]] || continue
-    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
+    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
   done < "$SERVICES_FILE"
 }
 
@@ -240,7 +253,12 @@ status_cmd() {
   dc ps
   echo
   if container_running; then
-    echo -e "${BLUE}Hostname:${NC} $(get_dns_name)"
+    local dns
+    dns="$(get_dns_name)"
+    echo -e "${BLUE}Hostname:${NC} ${dns}"
+    echo -e "${BLUE}URL pubblici:${NC}"
+    print_public_urls "$dns"
+    echo
     echo -e "${BLUE}Funnel:${NC}"
     dc exec -T "${SERVICE_NAME}" tailscale funnel status || true
     echo
@@ -259,18 +277,22 @@ status_cmd() {
 url_cmd() {
   local dns
   dns="$(get_dns_name)"
-  [[ -n "$dns" ]] && echo "https://${dns}" || log_warn "DNS Tailscale non ancora disponibile"
+  if [[ -z "$dns" ]]; then
+    log_warn "DNS Tailscale non ancora disponibile"
+    return 0
+  fi
+  print_public_urls "$dns"
 }
 
 start_cmd() {
-  local main_name="${1:-funnel}" main_port="${2:-18789}" main_path="${3:-/}"
+  local main_name="${1:-funnel}" main_target="${2:-18789}" main_path="${3:-/}"
   load_env
   check_prereqs
   dc up -d
   wait_tailscaled || { log_err "tailscaled non pronto"; exit 1; }
   cleanup_duplicate_nodes_api
   tailscale_up
-  ensure_main_service "$main_name" "$main_port" "$main_path"
+  ensure_main_service "$main_name" "$main_target" "$main_path"
   status_cmd
 }
 
@@ -313,9 +335,9 @@ main() {
     help|-h|--help|"")
       cat <<EOF
 Uso: $0 <comando>
-  start <main-name> <main-port> [main-path=/]
+  start <main-name> <main-port|target> [main-path=/]
   stop
-  add <name> <port> [path]
+  add <name> <port|target> [path]
   remove <name>
   reset
   status

@@ -35,7 +35,10 @@ check_module() {
 }
 
 check_authkey() {
-    local ts_env="${DATA_DIR}/tailscale-funnel/.env"
+    local ts_env="${TS_STACK_DIR}/.env"
+    if [[ ! -f "$ts_env" ]]; then
+        ts_env="${DATA_DIR}/tailscale-funnel/.env"
+    fi
     if [[ -f "$ts_env" ]]; then
         local authkey
         authkey="$(grep -E "^TS_AUTHKEY=" "$ts_env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || true)"
@@ -47,8 +50,12 @@ check_authkey() {
     fi
 }
 
-add_openclaw() {
-    log_info "Aggiunta OpenClaw a Tailscale Funnel..."
+add_service() {
+    local service_name="${1:-openclaw}"
+    local service_target="${2:-${OPENCLAW_PORT}}"
+    local service_path="${3:-/}"
+
+    log_info "Aggiunta servizio a Tailscale Funnel: ${service_name} -> ${service_target} (${service_path})"
     
     # Check se modulo esiste
     if [[ ! -f "$TS_MANAGER" ]]; then
@@ -60,7 +67,10 @@ add_openclaw() {
     fi
     
     # Check configurazione Tailscale
-    local ts_env="${DATA_DIR}/tailscale-funnel/.env"
+    local ts_env="${TS_STACK_DIR}/.env"
+    if [[ ! -f "$ts_env" ]]; then
+        ts_env="${DATA_DIR}/tailscale-funnel/.env"
+    fi
     local authkey=""
     
     if [[ -f "$ts_env" ]]; then
@@ -70,8 +80,8 @@ add_openclaw() {
     # Se Tailscale è già attivo, aggiungi servizio
     if docker ps --format '{{.Names}}' | grep -q "^tailscale-funnel$"; then
         log_success "Tailscale Funnel è attivo"
-        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" add openclaw "${OPENCLAW_PORT}" /)
-        log_success "OpenClaw aggiunto a Tailscale Funnel"
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" add "${service_name}" "${service_target}" "${service_path}")
+        log_success "Servizio aggiunto a Tailscale Funnel"
         echo
         log_info "URL Funnel:"
         (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)
@@ -81,8 +91,8 @@ add_openclaw() {
     # Tailscale non attivo - check se è configurato
     if [[ -n "$authkey" ]]; then
         log_info "Tailscale non attivo ma configurato - avvio automatico..."
-        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" start openclaw "${OPENCLAW_PORT}" /)
-        log_success "OpenClaw esposto su Tailscale Funnel"
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" start "${service_name}" "${service_target}" "${service_path}")
+        log_success "Servizio esposto su Tailscale Funnel"
         echo
         log_info "URL Funnel:"
         (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)
@@ -99,7 +109,7 @@ add_openclaw() {
     echo -e "   ${BLUE}nano .env  # Imposta TS_AUTHKEY${NC}"
     echo
     log_info "2. Poi esegui:"
-    echo -e "   ${BLUE}./start-service.sh openclaw ${OPENCLAW_PORT} /${NC}"
+    echo -e "   ${BLUE}./start-service.sh ${service_name} ${service_target} ${service_path}${NC}"
     echo
     log_info "Oppure ottieni una chiave da:"
     echo -e "   ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
@@ -162,7 +172,7 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-    add) add_openclaw ;;
+    add) add_service "$@" ;;
     remove) remove_openclaw "${1:-}" ;;
     url) show_url ;;
     status) status ;;

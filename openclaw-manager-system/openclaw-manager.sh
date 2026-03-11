@@ -222,11 +222,9 @@ case "$cmd" in
     full-reset) full_reset ;;
     tunnel-url) "${SCRIPT_DIR}/tailscale-add-service.sh" url ;;
     tailscale-add) 
-        shift
         "${SCRIPT_DIR}/tailscale-add-service.sh" add "$@"
         ;;
     tailscale-remove) 
-        shift
         "${SCRIPT_DIR}/tailscale-add-service.sh" remove "$@"
         ;;
     ""|-h|--help|help) usage ;;
