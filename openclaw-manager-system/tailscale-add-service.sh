@@ -11,17 +11,48 @@ TS_STACK_DIR="${REPO_TS_STACK_DIR:-${PACKAGE_ROOT}/tailscale-funnel-compose}"
 TS_MANAGER="${TS_STACK_DIR}/tailscale-funnel-compose.sh"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
+OPENCLAW_CONFIG_FILE="${DATA_DIR}/data/openclaw.json"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERRORE]${NC} $*"; }
+
+get_openclaw_token() {
+    if [[ -f "${OPENCLAW_CONFIG_FILE}" ]]; then
+        OPENCLAW_CONFIG_FILE="${OPENCLAW_CONFIG_FILE}" python3 - <<'PY' 2>/dev/null || true
+import json
+import os
+from pathlib import Path
+path = Path(os.environ["OPENCLAW_CONFIG_FILE"])
+try:
+    data = json.loads(path.read_text())
+    token = (((data.get("gateway") or {}).get("auth") or {}).get("token") or "").strip()
+    if token:
+        print(token)
+except Exception:
+    pass
+PY
+    fi
+}
+
+show_openclaw_dashboard_url() {
+    local base_url="$1"
+    local token
+    token="$(get_openclaw_token)"
+    if [[ -n "$token" ]]; then
+        echo "${base_url}/openclaw/#token=${token}"
+    else
+        echo "${base_url}/openclaw/"
+    fi
+}
 
 check_module() {
     if [[ ! -f "$TS_MANAGER" ]]; then
@@ -54,6 +85,10 @@ add_service() {
     local service_name="${1:-openclaw}"
     local service_target="${2:-${OPENCLAW_PORT}}"
     local service_path="${3:-/}"
+
+    if [[ "${service_name}" == "openclaw" && "${service_path}" == "/openclaw" ]]; then
+        service_path="/openclaw/"
+    fi
 
     log_info "Aggiunta servizio a Tailscale Funnel: ${service_name} -> ${service_target} (${service_path})"
     
@@ -132,7 +167,20 @@ remove_openclaw() {
 
 show_url() {
     if [[ -f "$TS_MANAGER" ]]; then
-        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)
+        local base_urls
+        base_urls="$(cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)"
+        if [[ -n "$base_urls" ]]; then
+            while IFS= read -r url; do
+                [[ -n "$url" ]] || continue
+                if [[ "$url" == */openclaw || "$url" == */openclaw/ ]]; then
+                    local base_url="${url%/openclaw/}"
+                    base_url="${base_url%/openclaw}"
+                    show_openclaw_dashboard_url "${base_url}"
+                else
+                    echo "$url"
+                fi
+            done <<< "$base_urls"
+        fi
     else
         log_warn "Modulo Tailscale non configurato"
     fi
@@ -141,6 +189,10 @@ show_url() {
 status() {
     echo -e "${CYAN}=== OpenClaw ===${NC}"
     docker ps --filter "name=openclaw" --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || true
+
+    echo
+    echo -e "${CYAN}=== OpenClaw Dashboard URL ===${NC}"
+    show_url || true
     
     echo
     echo -e "${CYAN}=== Tailscale Funnel ===${NC}"

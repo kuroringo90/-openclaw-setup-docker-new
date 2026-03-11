@@ -77,6 +77,35 @@ ensure_openclaw_dirs() {
     fi
 }
 
+ensure_openclaw_runtime_config() {
+    local config_file="${DATA_DIR}/data/openclaw.json"
+    python3 - "$config_file" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+data = {}
+
+if os.path.exists(path):
+    with open(path, 'r', encoding='utf-8') as fh:
+        try:
+            data = json.load(fh)
+        except Exception:
+            data = {}
+
+gateway = data.setdefault("gateway", {})
+gateway["bind"] = "lan"
+control_ui = gateway.setdefault("controlUi", {})
+control_ui["dangerouslyAllowHostHeaderOriginFallback"] = True
+
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, 'w', encoding='utf-8') as fh:
+    json.dump(data, fh, indent=2)
+    fh.write("\n")
+PY
+}
+
 ensure_openclaw_compose() {
     cat > "${COMPOSE_FILE}" <<EOF_COMPOSE
 services:
@@ -115,6 +144,7 @@ start_openclaw() {
     check_image
     ensure_openclaw_dirs
     ensure_openclaw_env
+    ensure_openclaw_runtime_config
     ensure_openclaw_compose
 
     export IMAGENAME="${IMAGE_NAME}"
