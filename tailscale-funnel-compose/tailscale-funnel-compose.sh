@@ -182,7 +182,7 @@ ensure_main_service() {
     dc exec -T "${SERVICE_NAME}" tailscale serve --bg "$port" >/dev/null
     dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null
   else
-    dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$port" >/dev/null
+    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
     dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null || true
   fi
 
@@ -228,7 +228,7 @@ rebuild_routes() {
       dc exec -T "${SERVICE_NAME}" tailscale serve --bg "$port" >/dev/null
       dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null || true
     else
-      dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$port" >/dev/null
+      dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
     fi
   done < "$SERVICES_FILE"
 }
