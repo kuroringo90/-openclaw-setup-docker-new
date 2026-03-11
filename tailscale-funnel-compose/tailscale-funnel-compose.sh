@@ -178,13 +178,7 @@ ensure_main_service() {
   local port="${2:-${TS_DEFAULT_SERVICE_PORT:-18789}}"
   local path="${3:-${TS_DEFAULT_SERVICE_PATH:-/}}"
 
-  if [[ "$path" == "/" ]]; then
-    dc exec -T "${SERVICE_NAME}" tailscale serve --bg "$port" >/dev/null
-    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null
-  else
-    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
-    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null || true
-  fi
+  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
 
   grep -Fq "$name	$port	$path" "$SERVICES_FILE" 2>/dev/null || echo -e "$name\t$port\t$path" >> "$SERVICES_FILE"
   log_ok "Servizio principale configurato: ${name} -> ${port} (${path})"
@@ -211,7 +205,7 @@ add_service() {
     exit 1
   fi
 
-  dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$port" >/dev/null
+  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
   echo -e "$name\t$port\t$path" >> "$SERVICES_FILE"
 
   local dns
@@ -221,15 +215,10 @@ add_service() {
 }
 
 rebuild_routes() {
-  dc exec -T "${SERVICE_NAME}" tailscale serve reset >/dev/null 2>&1 || true
+  dc exec -T "${SERVICE_NAME}" tailscale funnel reset >/dev/null 2>&1 || true
   while IFS=$'\t' read -r name port path; do
     [[ -n "$name" ]] || continue
-    if [[ "$path" == "/" ]]; then
-      dc exec -T "${SERVICE_NAME}" tailscale serve --bg "$port" >/dev/null
-      dc exec -T "${SERVICE_NAME}" tailscale funnel --bg "$port" >/dev/null || true
-    else
-      dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
-    fi
+    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$port" >/dev/null
   done < "$SERVICES_FILE"
 }
 
