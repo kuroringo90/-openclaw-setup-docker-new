@@ -206,9 +206,18 @@ cd openclaw-manager-system
 # Add Uptime Kuma on /uptime
 ./openclaw-manager.sh tailscale-add uptime 3001 /uptime
 
+# Add a tailnet-only service
+./openclaw-manager.sh tailscale-add admin 8081 /admin serve
+
 # View status
 ./openclaw-manager.sh status-full
 ```
+
+Default behavior:
+
+- omitted mode => `funnel` (public on Internet)
+- explicit `serve` => tailnet-only
+- `funnel` and `serve` should not be mixed on the same path-based hostname; choose one mode per stack
 
 ---
 
@@ -231,6 +240,37 @@ cd openclaw-manager-system
 - [ ] Enable ACLs in Tailscale admin
 - [ ] Configure firewall rules
 - [ ] Set up monitoring/alerting
+- [ ] Review OpenClaw remote-access tradeoff documented below before exposing the dashboard publicly
+- [ ] Review Tailscale Funnel runtime observations documented below before public exposure
+
+### OpenClaw Remote Access Note
+
+Observed in runtime validation:
+
+- OpenClaw dashboard works correctly behind Funnel only when exposed on `/openclaw/` with trailing slash
+- the dashboard URL must include the gateway token, for example `https://<funnel-host>/openclaw/#token=...`
+- the current production integration enables `gateway.bind=lan`
+- the current production integration also enables `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true`
+
+Security implication:
+
+- this fallback weakens origin validation for the Control UI and should be treated as a temporary compatibility setting, not a final hardening state
+- a stricter follow-up should replace it with explicit `gateway.controlUi.allowedOrigins` matching the final public URL(s)
+
+### Tailscale Funnel Runtime Note
+
+Observed in runtime validation:
+
+- `tailscale funnel` is the correct public exposure mode; `tailscale serve` remains tailnet-only
+- path-based public exposure is sensitive to the backend application path model
+- applications using relative frontend assets may require a trailing slash on the public path, as seen with OpenClaw on `/openclaw/`
+- public edge behavior can be temporarily inconsistent immediately after route changes or resets
+
+Security implication:
+
+- do not treat transient Funnel edge propagation or tailnet policy behavior as an application bug without checking `tailscale funnel status`
+- verify both the HTML entrypoint and public static assets after every path-based change
+- keep public routes minimal and explicit; avoid exposing unnecessary default paths until a deliberate landing page is introduced
 
 See [SECURITY.md](./SECURITY.md) for detailed security guide.
 

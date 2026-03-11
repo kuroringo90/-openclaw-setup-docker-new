@@ -130,6 +130,34 @@ ports:
    - Enable device authorization
    - Set key expiry
 
+Observed during runtime validation:
+
+- public exposure worked only when routes were created with `tailscale funnel`, not `tailscale serve`
+- path-based routes need application-aware validation, especially for apps that use relative frontend assets
+- after route changes, public Funnel edge behavior may be briefly inconsistent across edge IPs before stabilizing
+
+Operational security note:
+
+- verify `tailscale funnel status` after every route mutation
+- verify both the public HTML entrypoint and at least one public static asset
+- treat tailnet ACL/tag policy and Funnel edge propagation as external controls, not as application bugs
+
+### 4. OpenClaw Control UI Tradeoff
+
+Observed during production-path validation:
+
+- OpenClaw dashboard access through Funnel required a tokenized URL such as `https://<funnel-host>/openclaw/#token=...`
+- the dashboard assets loaded correctly only when the public path used `/openclaw/` with trailing slash
+- to make the OpenClaw gateway reachable from Docker localhost and then through Funnel, the runtime config was set to:
+  - `gateway.bind = "lan"`
+  - `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback = true`
+
+Security note:
+
+- `dangerouslyAllowHostHeaderOriginFallback=true` is explicitly a weaker origin-check mode
+- keep this as a temporary compatibility setting
+- for a stricter production posture, replace it later with explicit `gateway.controlUi.allowedOrigins` for the final public OpenClaw URL(s)
+
 ---
 
 ## Secrets Management

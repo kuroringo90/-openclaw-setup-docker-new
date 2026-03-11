@@ -225,12 +225,13 @@ Comandi principali:
   tunnel-url      Mostra URL Funnel Tailscale
 
 Gestione Tailscale:
-  tailscale-add <name> <port> [path]     Aggiungi servizio a Funnel
+  tailscale-add <name> <port|target> [path] [mode]   Aggiungi servizio a Tailscale
   tailscale-remove <name>                Rimuovi servizio da Funnel
 
 Esempi:
   $0 start
   $0 tailscale-add grafana 3000 /grafana
+  $0 tailscale-add grafana 3000 /grafana serve
   $0 tunnel-url
 EOF
 }

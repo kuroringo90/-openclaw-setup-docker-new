@@ -85,12 +85,13 @@ add_service() {
     local service_name="${1:-openclaw}"
     local service_target="${2:-${OPENCLAW_PORT}}"
     local service_path="${3:-/}"
+    local service_mode="${4:-funnel}"
 
     if [[ "${service_name}" == "openclaw" && "${service_path}" == "/openclaw" ]]; then
         service_path="/openclaw/"
     fi
 
-    log_info "Aggiunta servizio a Tailscale Funnel: ${service_name} -> ${service_target} (${service_path})"
+    log_info "Aggiunta servizio a Tailscale: ${service_name} -> ${service_target} (${service_path}, mode=${service_mode})"
     
     # Check se modulo esiste
     if [[ ! -f "$TS_MANAGER" ]]; then
@@ -115,7 +116,7 @@ add_service() {
     # Se Tailscale è già attivo, aggiungi servizio
     if docker ps --format '{{.Names}}' | grep -q "^tailscale-funnel$"; then
         log_success "Tailscale Funnel è attivo"
-        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" add "${service_name}" "${service_target}" "${service_path}")
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" add "${service_name}" "${service_target}" "${service_path}" "${service_mode}")
         log_success "Servizio aggiunto a Tailscale Funnel"
         echo
         log_info "URL Funnel:"
@@ -126,7 +127,7 @@ add_service() {
     # Tailscale non attivo - check se è configurato
     if [[ -n "$authkey" ]]; then
         log_info "Tailscale non attivo ma configurato - avvio automatico..."
-        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" start "${service_name}" "${service_target}" "${service_path}")
+        (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" start "${service_name}" "${service_target}" "${service_path}" "${service_mode}")
         log_success "Servizio esposto su Tailscale Funnel"
         echo
         log_info "URL Funnel:"
@@ -144,7 +145,7 @@ add_service() {
     echo -e "   ${BLUE}nano .env  # Imposta TS_AUTHKEY${NC}"
     echo
     log_info "2. Poi esegui:"
-    echo -e "   ${BLUE}./start-service.sh ${service_name} ${service_target} ${service_path}${NC}"
+    echo -e "   ${BLUE}./start-service.sh ${service_name} ${service_target} ${service_path} ${service_mode}${NC}"
     echo
     log_info "Oppure ottieni una chiave da:"
     echo -e "   ${BLUE}https://login.tailscale.com/admin/settings/keys${NC}"
@@ -215,6 +216,7 @@ Comandi:
 
 Esempi:
   $0 add      # Aggiungi OpenClaw a Funnel
+  $0 add openclaw 18789 /openclaw/ serve
   $0 url      # Mostra URL pubblico
   $0 status   # Mostra stato completo
 EOF

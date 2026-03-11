@@ -38,6 +38,7 @@ cp .env.example .env
 # imposta TS_AUTHKEY
 ./tailscale-funnel-compose.sh start myapp 8080 /
 ./tailscale-funnel-compose.sh add grafana 3000 /grafana
+./tailscale-funnel-compose.sh add grafana 3000 /grafana serve
 ./tailscale-funnel-compose.sh status
 ```
 
@@ -65,8 +66,8 @@ Il file `config/services.tsv` deve restare gestito solo dal manager Tailscale. I
 ## Comandi esposti dal manager
 
 ```bash
-./tailscale-funnel-compose.sh start <main-name> <main-port> [main-path=/]
-./tailscale-funnel-compose.sh add <name> <port> [path]
+./tailscale-funnel-compose.sh start <main-name> <main-port|target> [main-path=/] [main-mode=funnel|serve]
+./tailscale-funnel-compose.sh add <name> <port|target> [path] [mode=funnel|serve]
 ./tailscale-funnel-compose.sh remove <name>
 ./tailscale-funnel-compose.sh status
 ./tailscale-funnel-compose.sh url
@@ -87,5 +88,8 @@ Il file `config/services.tsv` deve restare gestito solo dal manager Tailscale. I
 - il servizio principale deve stare su `/`
 - i servizi secondari devono usare path dedicati
 - nome, porta e path devono restare univoci
+- il mode di default deve essere esplicito per il consumer; se omesso resta `funnel`
+- `serve` va trattato come modalità tailnet-only, non come fallback di errore
+- `funnel` e `serve` non vanno mischiati sullo stesso hostname path-based; scegli una sola modalità per stack
 - il cleanup duplicati deve essere opzionale ma disponibile
 - `state/` e `config/` devono essere persistenti

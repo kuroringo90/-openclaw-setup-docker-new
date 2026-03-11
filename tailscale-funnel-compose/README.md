@@ -87,12 +87,12 @@ nano .env  # Set TS_AUTHKEY
 ### tailscale-funnel-compose.sh Commands
 
 ```bash
-./tailscale-funnel-compose.sh start <name> <port> [path=/]   # Start with main service
-./tailscale-funnel-compose.sh add <name> <port> [path]       # Add secondary service
+./tailscale-funnel-compose.sh start <name> <port|target> [path=/] [mode=funnel|serve]
+./tailscale-funnel-compose.sh add <name> <port|target> [path] [mode=funnel|serve]
 ./tailscale-funnel-compose.sh remove <name>                  # Remove service
 ./tailscale-funnel-compose.sh stop                           # Stop container
 ./tailscale-funnel-compose.sh status                         # Show status
-./tailscale-funnel-compose.sh url                            # Show Funnel URL
+./tailscale-funnel-compose.sh url                            # Show public + tailnet URLs
 ./tailscale-funnel-compose.sh logs                           # Stream logs
 ./tailscale-funnel-compose.sh shell                          # Enter container
 ./tailscale-funnel-compose.sh cleanup-duplicates             # Remove duplicate nodes
@@ -144,6 +144,11 @@ TS_HOSTNAME=tailscale-funnel
 
 # Optional: Container name (default: tailscale-funnel)
 TS_CONTAINER_NAME=tailscale-funnel
+
+# Optional: default service exposure mode
+# funnel = public on Internet (default)
+# serve  = tailnet-only
+TS_DEFAULT_EXPOSURE_MODE=funnel
 ```
 
 ### Validate Configuration
@@ -178,6 +183,23 @@ TS_CONTAINER_NAME=tailscale-funnel
 # Add Admin panel
 ./tailscale-funnel-compose.sh add admin 8081 /admin
 ```
+
+### Example 3: Tailnet-only Service
+
+```bash
+# Public by default
+./tailscale-funnel-compose.sh add public-api 8082 /api
+
+# Tailnet-only service
+./tailscale-funnel-compose.sh add backoffice 8083 /backoffice serve
+```
+
+Mode summary:
+
+- omitted mode => `funnel`
+- `funnel` => public on Internet
+- `serve` => tailnet-only
+- mixed `funnel` + `serve` path-based routes on the same hostname are not supported; use one mode per stack/hostname
 
 ### Example 3: Health Check Integration
 

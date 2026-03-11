@@ -93,14 +93,79 @@ get_tailnet_name() {
 print_public_urls() {
   local dns="$1"
   [[ -n "$dns" ]] || return 0
+  [[ "$(get_registry_exposure_mode)" == "funnel" ]] || return 0
 
   if [[ -s "$SERVICES_FILE" ]]; then
-    while IFS=$'\t' read -r name target path; do
+    while IFS=$'\t' read -r name target path exposure; do
       [[ -n "$name" && -n "$path" ]] || continue
       echo "https://${dns}${path}"
     done < "$SERVICES_FILE"
-  else
-    echo "https://${dns}"
+  fi
+}
+
+print_tailnet_urls() {
+  local dns="$1"
+  [[ -n "$dns" ]] || return 0
+  [[ "$(get_registry_exposure_mode)" == "serve" ]] || return 0
+
+  if [[ -s "$SERVICES_FILE" ]]; then
+    while IFS=$'\t' read -r name target path exposure; do
+      [[ -n "$name" && -n "$path" ]] || continue
+      echo "https://${dns}${path}"
+    done < "$SERVICES_FILE"
+  fi
+}
+
+normalize_exposure_mode() {
+  local mode="${1:-${TS_DEFAULT_EXPOSURE_MODE:-funnel}}"
+  mode="$(printf '%s' "$mode" | tr '[:upper:]' '[:lower:]')"
+  case "$mode" in
+    ""|public|internet|funnel) echo "funnel" ;;
+    tailnet|private|serve) echo "serve" ;;
+    *) log_err "Modalità esposizione non valida: $mode (usa funnel|serve)"; exit 1 ;;
+  esac
+}
+
+apply_service_route() {
+  local target="$1" path="$2" exposure="$3"
+  exposure="$(normalize_exposure_mode "$exposure")"
+  case "$exposure" in
+    funnel) dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null ;;
+    serve) dc exec -T "${SERVICE_NAME}" tailscale serve --bg --set-path "$path" "$target" >/dev/null ;;
+  esac
+}
+
+get_registry_exposure_mode() {
+  local mode=""
+  if [[ -s "$SERVICES_FILE" ]]; then
+    while IFS=$'\t' read -r name target path exposure; do
+      [[ -n "$name" ]] || continue
+      exposure="$(normalize_exposure_mode "${exposure:-funnel}")"
+      if [[ -z "$mode" ]]; then
+        mode="$exposure"
+      elif [[ "$mode" != "$exposure" ]]; then
+        log_warn "Registry servizi in mixed-mode non supportato: ${mode} + ${exposure}"
+        echo "mixed"
+        return 0
+      fi
+    done < "$SERVICES_FILE"
+  fi
+  echo "${mode:-$(normalize_exposure_mode "${TS_DEFAULT_EXPOSURE_MODE:-funnel}")}"
+}
+
+enforce_stack_exposure_mode() {
+  local requested="$1"
+  local current
+  requested="$(normalize_exposure_mode "$requested")"
+  current="$(get_registry_exposure_mode)"
+  if [[ "$current" == "mixed" ]]; then
+    log_err "Il registry contiene modalità miste non supportate; riallinea i servizi a una sola modalità prima di continuare"
+    exit 1
+  fi
+  if [[ -s "$SERVICES_FILE" && "$current" != "$requested" ]]; then
+    log_err "Modalità mista non supportata sullo stesso hostname: stack=${current}, richiesta=${requested}"
+    log_info "Usa una sola modalità per tutto lo stack: funnel (pubblico) oppure serve (tailnet-only)"
+    exit 1
   fi
 }
 
@@ -191,11 +256,14 @@ ensure_main_service() {
   local name="${1:-${TS_DEFAULT_SERVICE_NAME:-funnel}}"
   local target="${2:-${TS_DEFAULT_SERVICE_PORT:-18789}}"
   local path="${3:-${TS_DEFAULT_SERVICE_PATH:-/}}"
+  local exposure="${4:-${TS_DEFAULT_EXPOSURE_MODE:-funnel}}"
 
-  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
+  exposure="$(normalize_exposure_mode "$exposure")"
+  enforce_stack_exposure_mode "$exposure"
+  apply_service_route "$target" "$path" "$exposure"
 
-  grep -Fq "$name	$target	$path" "$SERVICES_FILE" 2>/dev/null || echo -e "$name\t$target\t$path" >> "$SERVICES_FILE"
-  log_ok "Servizio principale configurato: ${name} -> ${target} (${path})"
+  grep -Fq "$name	$target	$path	$exposure" "$SERVICES_FILE" 2>/dev/null || echo -e "$name\t$target\t$path\t$exposure" >> "$SERVICES_FILE"
+  log_ok "Servizio principale configurato: ${name} -> ${target} (${path}, mode=${exposure})"
 }
 
 service_exists() {
@@ -207,10 +275,12 @@ service_exists() {
 }
 
 add_service() {
-  local name="${1:-}" target="${2:-}" path="${3:-}"
+  local name="${1:-}" target="${2:-}" path="${3:-}" exposure="${4:-${TS_DEFAULT_EXPOSURE_MODE:-funnel}}"
   [[ -n "$name" && -n "$target" ]] || { log_err "Uso: $0 add <name> <port|target> [path]"; exit 1; }
   path="${path:-/$name}"
   [[ "$path" == /* ]] || { log_err "Il path deve iniziare con /"; exit 1; }
+  exposure="$(normalize_exposure_mode "$exposure")"
+  enforce_stack_exposure_mode "$exposure"
 
   if service_exists "$name" "$target" "$path"; then
     log_err "Duplicato rilevato: nome, porta o path già presente"
@@ -218,20 +288,21 @@ add_service() {
     exit 1
   fi
 
-  dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
-  echo -e "$name\t$target\t$path" >> "$SERVICES_FILE"
+  apply_service_route "$target" "$path" "$exposure"
+  echo -e "$name\t$target\t$path\t$exposure" >> "$SERVICES_FILE"
 
   local dns
   dns="$(get_dns_name)"
-  log_ok "Servizio aggiunto: ${name} -> ${target} (${path})"
+  log_ok "Servizio aggiunto: ${name} -> ${target} (${path}, mode=${exposure})"
   [[ -n "$dns" ]] && echo -e "${GREEN}URL:${NC} https://${dns}${path}"
 }
 
 rebuild_routes() {
   dc exec -T "${SERVICE_NAME}" tailscale funnel reset >/dev/null 2>&1 || true
-  while IFS=$'\t' read -r name target path; do
+  dc exec -T "${SERVICE_NAME}" tailscale serve reset >/dev/null 2>&1 || true
+  while IFS=$'\t' read -r name target path exposure; do
     [[ -n "$name" ]] || continue
-    dc exec -T "${SERVICE_NAME}" tailscale funnel --bg --set-path "$path" "$target" >/dev/null
+    apply_service_route "$target" "$path" "${exposure:-funnel}"
   done < "$SERVICES_FILE"
 }
 
@@ -254,10 +325,19 @@ status_cmd() {
   echo
   if container_running; then
     local dns
+    local registry_mode
     dns="$(get_dns_name)"
+    registry_mode="$(get_registry_exposure_mode)"
     echo -e "${BLUE}Hostname:${NC} ${dns}"
+    echo -e "${BLUE}Mode stack:${NC} ${registry_mode}"
     echo -e "${BLUE}URL pubblici:${NC}"
-    print_public_urls "$dns"
+    local public_urls tailnet_urls
+    public_urls="$(print_public_urls "$dns")"
+    tailnet_urls="$(print_tailnet_urls "$dns")"
+    [[ -n "$public_urls" ]] && printf '%s\n' "$public_urls" || echo "(nessuno)"
+    echo
+    echo -e "${BLUE}URL tailnet:${NC}"
+    [[ -n "$tailnet_urls" ]] && printf '%s\n' "$tailnet_urls" || echo "(nessuno)"
     echo
     echo -e "${BLUE}Funnel:${NC}"
     dc exec -T "${SERVICE_NAME}" tailscale funnel status || true
@@ -282,17 +362,18 @@ url_cmd() {
     return 0
   fi
   print_public_urls "$dns"
+  print_tailnet_urls "$dns"
 }
 
 start_cmd() {
-  local main_name="${1:-funnel}" main_target="${2:-18789}" main_path="${3:-/}"
+  local main_name="${1:-funnel}" main_target="${2:-18789}" main_path="${3:-/}" main_exposure="${4:-${TS_DEFAULT_EXPOSURE_MODE:-funnel}}"
   load_env
   check_prereqs
   dc up -d
   wait_tailscaled || { log_err "tailscaled non pronto"; exit 1; }
   cleanup_duplicate_nodes_api
   tailscale_up
-  ensure_main_service "$main_name" "$main_target" "$main_path"
+  ensure_main_service "$main_name" "$main_target" "$main_path" "$main_exposure"
   status_cmd
 }
 
@@ -313,6 +394,7 @@ shell_cmd() {
 
 reset_cmd() {
   load_env
+  dc exec -T "${SERVICE_NAME}" tailscale funnel reset >/dev/null 2>&1 || true
   dc exec -T "${SERVICE_NAME}" tailscale serve reset >/dev/null 2>&1 || true
   : > "$SERVICES_FILE"
   log_ok "Configurazione serve/funnel resettata"
@@ -335,9 +417,9 @@ main() {
     help|-h|--help|"")
       cat <<EOF
 Uso: $0 <comando>
-  start <main-name> <main-port|target> [main-path=/]
+  start <main-name> <main-port|target> [main-path=/] [main-mode=funnel|serve]
   stop
-  add <name> <port|target> [path]
+  add <name> <port|target> [path] [mode=funnel|serve]
   remove <name>
   reset
   status

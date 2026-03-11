@@ -52,6 +52,10 @@ Use this checklist before deploying to production.
 - [ ] Health check passes: `./health-check.sh`
 - [ ] Funnel URL accessible
 - [ ] OpenClaw UI loads correctly
+- [ ] OpenClaw dashboard tested with tokenized URL `.../openclaw/#token=...`
+- [ ] OpenClaw dashboard tested with trailing slash path `/openclaw/`
+- [ ] Temporary security tradeoff accepted or replaced: `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true`
+- [ ] Public route type verified as Funnel, not Serve
 
 ### Verification
 
@@ -59,6 +63,9 @@ Use this checklist before deploying to production.
 - [ ] Funnel endpoint is active
 - [ ] Local health check passes (http://127.0.0.1:18789)
 - [ ] Remote access via Funnel URL works
+- [ ] Remote OpenClaw JS/CSS assets load correctly under `/openclaw/assets/...`
+- [ ] `tailscale funnel status` reviewed after the last route change
+- [ ] At least one public Funnel edge IP tested after route changes when behavior looks inconsistent
 
 ## Post-Deployment
 
