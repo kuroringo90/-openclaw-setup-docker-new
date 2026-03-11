@@ -14,7 +14,8 @@ services:
     volumes:
       - ./state:/var/lib/tailscale
       - ./config:/config
-    command: tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state
+      - ./container-bootstrap.sh:/container-bootstrap.sh:ro
+    command: /bin/sh /container-bootstrap.sh
     healthcheck:
       test: ["CMD-SHELL", "tailscale status >/dev/null 2>&1 || exit 1"]
       interval: 30s
