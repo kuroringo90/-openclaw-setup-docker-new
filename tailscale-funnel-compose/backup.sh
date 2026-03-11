@@ -89,8 +89,13 @@ restore_backup() {
     
     log_info "Restoring from: $backup_file"
     
-    # Stop containers
-    "${SCRIPT_DIR}/openclaw-manager.sh" stop || true
+    # Precondizione: per restore consistente, fermare manualmente i container
+    if docker ps --format '{{.Names}}' | grep -qE "^(tailscale-funnel|openclaw)$"; then
+        log_warn "Container in esecuzione rilevati"
+        log_info "Per restore consistente, eseguire prima:"
+        log_info "  docker stop tailscale-funnel openclaw"
+        exit 1
+    fi
     
     # Extract backup
     local temp_dir
@@ -122,7 +127,7 @@ restore_backup() {
     rm -rf "${temp_dir}"
     
     log_success "Restore completed"
-    log_info "Run './openclaw-manager.sh start' to restart"
+    log_info "Avviare manualmente i servizi dopo il restore"
 }
 
 list_backups() {

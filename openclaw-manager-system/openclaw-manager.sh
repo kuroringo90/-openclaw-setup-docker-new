@@ -185,18 +185,23 @@ usage() {
 Uso: $0 <comando>
 
 Comandi principali:
-  start       Avvia OpenClaw
-  stop        Ferma OpenClaw
-  restart     Riavvia OpenClaw
-  status      Mostra stato OpenClaw
-  logs        Mostra log in tempo reale
-  full-reset  Reset completo runtime
+  start           Avvia OpenClaw
+  stop            Ferma OpenClaw
+  restart         Riavvia OpenClaw
+  status          Mostra stato OpenClaw
+  status-full     Mostra stato OpenClaw + Tailscale
+  logs            Mostra log in tempo reale
+  full-reset      Reset completo runtime
+  tunnel-url      Mostra URL Funnel Tailscale
 
-Accesso remoto (Tailscale Funnel):
-  OpenClaw di base è accessibile solo in locale (127.0.0.1:${DEFAULT_OPENCLAW_PORT})
-  Per abilitare accesso remoto, usa il modulo tailscale-funnel-compose/
-  
-  Vedi: ../tailscale-funnel-compose/README.md
+Gestione Tailscale:
+  tailscale-add <name> <port> [path]     Aggiungi servizio a Funnel
+  tailscale-remove <name>                Rimuovi servizio da Funnel
+
+Esempi:
+  $0 start
+  $0 tailscale-add grafana 3000 /grafana
+  $0 tunnel-url
 EOF
 }
 
@@ -208,8 +213,22 @@ case "$cmd" in
     stop) stop_openclaw ;;
     restart) restart_openclaw ;;
     status) status_openclaw ;;
+    status-full) 
+        status_openclaw
+        echo
+        "${SCRIPT_DIR}/tailscale-add-service.sh" status 2>/dev/null || true
+        ;;
     logs) logs_openclaw ;;
     full-reset) full_reset ;;
+    tunnel-url) "${SCRIPT_DIR}/tailscale-add-service.sh" url ;;
+    tailscale-add) 
+        shift
+        "${SCRIPT_DIR}/tailscale-add-service.sh" add "$@"
+        ;;
+    tailscale-remove) 
+        shift
+        "${SCRIPT_DIR}/tailscale-add-service.sh" remove "$@"
+        ;;
     ""|-h|--help|help) usage ;;
     *) log_error "Comando sconosciuto: ${cmd}"; usage; exit 1 ;;
 esac

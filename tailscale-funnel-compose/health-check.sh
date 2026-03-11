@@ -6,8 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
-TS_STACK_DIR="${DATA_DIR}/tailscale-funnel"
+TS_STACK_DIR="${SCRIPT_DIR}"
 
 # Exit codes
 EXIT_HEALTHY=0
