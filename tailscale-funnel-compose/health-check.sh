@@ -35,12 +35,12 @@ log_check() {
         ok)
             echo -e "${GREEN}[PASS]${NC} $name"
             [[ -n "$message" ]] && echo "       $message"
-            ((CHECKS_PASSED++))
+            CHECKS_PASSED=$((CHECKS_PASSED + 1))
             ;;
         warn)
             echo -e "${YELLOW}[WARN]${NC} $name"
             [[ -n "$message" ]] && echo "       $message"
-            ((CHECKS_WARNING++))
+            CHECKS_WARNING=$((CHECKS_WARNING + 1))
             if [[ $HEALTH_STATUS -eq $EXIT_HEALTHY ]]; then
                 HEALTH_STATUS=$EXIT_DEGRADED
             fi
@@ -48,7 +48,7 @@ log_check() {
         fail)
             echo -e "${RED}[FAIL]${NC} $name"
             [[ -n "$message" ]] && echo "       $message"
-            ((CHECKS_FAILED++))
+            CHECKS_FAILED=$((CHECKS_FAILED + 1))
             HEALTH_STATUS=$EXIT_UNHEALTHY
             ;;
     esac

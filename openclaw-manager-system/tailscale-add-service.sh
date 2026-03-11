@@ -108,15 +108,16 @@ add_openclaw() {
 }
 
 remove_openclaw() {
-    log_info "Rimozione OpenClaw da Tailscale Funnel..."
+    local name="${1:-openclaw}"
+    log_info "Rimozione ${name} da Tailscale Funnel..."
     
     if [[ ! -f "$TS_MANAGER" ]]; then
         log_warn "Modulo Tailscale non trovato"
         return 0
     fi
     
-    (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" remove openclaw) || true
-    log_success "OpenClaw rimosso da Tailscale Funnel"
+    (cd "${TS_STACK_DIR}" && "${TS_MANAGER}" remove "${name}") || true
+    log_success "${name} rimosso da Tailscale Funnel"
 }
 
 show_url() {
@@ -162,7 +163,7 @@ shift || true
 
 case "$cmd" in
     add) add_openclaw ;;
-    remove) remove_openclaw ;;
+    remove) remove_openclaw "${1:-}" ;;
     url) show_url ;;
     status) status ;;
     ""|-h|--help|help) usage ;;

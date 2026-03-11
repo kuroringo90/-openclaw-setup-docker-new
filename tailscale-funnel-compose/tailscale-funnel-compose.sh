@@ -160,10 +160,16 @@ tailscale_up() {
     return 0
   fi
   log_info "Autenticazione Tailscale..."
-  dc exec -T "${SERVICE_NAME}" tailscale up \
-    --authkey="${TS_AUTHKEY}" \
-    --hostname="${hostname}" \
-    --advertise-tags=tag:container >/dev/null
+  if [[ -n "${TS_ADVERTISE_TAGS:-}" ]]; then
+    dc exec -T "${SERVICE_NAME}" tailscale up \
+      --authkey="${TS_AUTHKEY}" \
+      --hostname="${hostname}" \
+      --advertise-tags="${TS_ADVERTISE_TAGS}" >/dev/null
+  else
+    dc exec -T "${SERVICE_NAME}" tailscale up \
+      --authkey="${TS_AUTHKEY}" \
+      --hostname="${hostname}" >/dev/null
+  fi
   log_ok "Autenticazione completata"
 }
 
