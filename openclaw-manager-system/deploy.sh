@@ -245,14 +245,12 @@ print_next_steps() {
     echo
     
     # Chiedi se abilitare Tailscale subito
-    if [[ -d "${PACKAGE_ROOT}/tailscale-funnel-compose" ]]; then
-        echo "============================================"
-        read -rp "Vuoi configurare Tailscale Funnel ora? (y/n): " configure_ts
-        if [[ "$configure_ts" == "y" || "$configure_ts" == "Y" ]]; then
-            echo
-            log_info "Verifica configurazione Tailscale..."
-            "${SCRIPT_DIR}/tailscale-add-service.sh" add || true
-        fi
+    echo "============================================"
+    read -rp "Vuoi configurare Tailscale Funnel ora? (y/n): " configure_ts
+    if [[ "$configure_ts" == "y" || "$configure_ts" == "Y" ]]; then
+        echo
+        log_info "Verifica configurazione Tailscale..."
+        "${SCRIPT_DIR}/tailscale-add-service.sh" add || true
     fi
 }
 

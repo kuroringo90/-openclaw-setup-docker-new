@@ -7,8 +7,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TS_STACK_DIR="${REPO_TS_STACK_DIR:-${PACKAGE_ROOT}/tailscale-funnel-compose}"
-TS_MANAGER="${TS_STACK_DIR}/tailscale-funnel-compose.sh"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 OPENCLAW_PORT="${OPENCLAW_PORT:-18789}"
 OPENCLAW_CONFIG_FILE="${DATA_DIR}/data/openclaw.json"
@@ -24,6 +22,38 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERRORE]${NC} $*"; }
+
+resolve_ts_stack_dir() {
+    local candidate
+
+    if [[ -n "${REPO_TS_STACK_DIR:-}" ]]; then
+        candidate="${REPO_TS_STACK_DIR}"
+        [[ -f "${candidate}/tailscale-funnel-compose.sh" ]] && { printf '%s\n' "${candidate}"; return 0; }
+    fi
+
+    for candidate in \
+        "${PACKAGE_ROOT}/../tailscale-funnel-compose-standalone" \
+        "${PACKAGE_ROOT}/../tailscale-funnel-compose" \
+        "${PACKAGE_ROOT}/tailscale-funnel-compose" \
+        "/opt/tailscale-funnel-compose"
+    do
+        [[ -f "${candidate}/tailscale-funnel-compose.sh" && -f "${candidate}/.env" ]] && { printf '%s\n' "${candidate}"; return 0; }
+    done
+
+    for candidate in \
+        "${PACKAGE_ROOT}/../tailscale-funnel-compose-standalone" \
+        "${PACKAGE_ROOT}/../tailscale-funnel-compose" \
+        "${PACKAGE_ROOT}/tailscale-funnel-compose" \
+        "/opt/tailscale-funnel-compose"
+    do
+        [[ -f "${candidate}/tailscale-funnel-compose.sh" ]] && { printf '%s\n' "${candidate}"; return 0; }
+    done
+
+    return 1
+}
+
+TS_STACK_DIR="$(resolve_ts_stack_dir || true)"
+TS_MANAGER="${TS_STACK_DIR:+${TS_STACK_DIR}/tailscale-funnel-compose.sh}"
 
 get_openclaw_token() {
     if [[ -f "${OPENCLAW_CONFIG_FILE}" ]]; then
@@ -58,9 +88,13 @@ check_module() {
     if [[ ! -f "$TS_MANAGER" ]]; then
         log_error "Modulo Tailscale non trovato: ${TS_MANAGER}"
         log_info "Per abilitare accesso remoto:"
-        log_info "  1. Clona o copia tailscale-funnel-compose/"
-        log_info "  2. Configura .env con TS_AUTHKEY"
-        log_info "  3. Esegui: ${TS_MANAGER} start openclaw ${OPENCLAW_PORT} /"
+        log_info "  1. Clona il repo modulo tailscale-funnel-compose"
+        log_info "  2. Oppure imposta REPO_TS_STACK_DIR verso il modulo standalone"
+        log_info "  3. Path cercati automaticamente:"
+        log_info "     - ${PACKAGE_ROOT}/../tailscale-funnel-compose-standalone"
+        log_info "     - ${PACKAGE_ROOT}/../tailscale-funnel-compose"
+        log_info "     - /opt/tailscale-funnel-compose"
+        log_info "  4. Configura .env con TS_AUTHKEY"
         exit 1
     fi
 }
@@ -97,7 +131,7 @@ add_service() {
     if [[ ! -f "$TS_MANAGER" ]]; then
         log_error "Modulo Tailscale non trovato: ${TS_MANAGER}"
         log_info "Per abilitare accesso remoto:"
-        log_info "  1. Clona o copia tailscale-funnel-compose/"
+        log_info "  1. Clona il modulo standalone o imposta REPO_TS_STACK_DIR"
         log_info "  2. Configura .env con TS_AUTHKEY"
         exit 1
     fi
@@ -140,7 +174,7 @@ add_service() {
     log_info "Per abilitare accesso remoto:"
     echo
     log_info "1. Configura TS_AUTHKEY:"
-    echo -e "   ${BLUE}cd ../tailscale-funnel-compose${NC}"
+    echo -e "   ${BLUE}cd ${TS_STACK_DIR:-/percorso/al/modulo/tailscale-funnel-compose}${NC}"
     echo -e "   ${BLUE}cp .env.example .env${NC}"
     echo -e "   ${BLUE}nano .env  # Imposta TS_AUTHKEY${NC}"
     echo

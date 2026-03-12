@@ -3,8 +3,13 @@
 ## Cosa cambia
 
 - `openclaw-manager.sh` non crea più il sidecar Tailscale con `docker run`.
-- Ora installa e usa lo stack standalone in `~/.openclaw/tailscale-funnel`.
-- I file sorgente dello stack vengono presi dalla cartella repo `tailscale-funnel-compose/`.
+- Ora usa il modulo standalone `tailscale-funnel-compose` come dipendenza esterna.
+- Il wrapper cerca il modulo in quest'ordine:
+  1. `REPO_TS_STACK_DIR`
+  2. repo sibling `../tailscale-funnel-compose-standalone`
+  3. repo sibling `../tailscale-funnel-compose`
+  4. vendor locale `tailscale-funnel-compose/`
+  5. installazione `/opt/tailscale-funnel-compose`
 
 ## Compatibilità mantenuta
 
