@@ -1,6 +1,6 @@
-# OpenClaw + Tailscale Funnel - Production Deployment Guide
+# OpenClaw Manager + External Tailscale Module
 
-> **Production-ready deployment system for OpenClaw with secure remote access via Tailscale Funnel**
+> **OpenClaw application repo with optional remote exposure through the external `tailscale-funnel-compose` module**
 
 [![GitHub](https://img.shields.io/github/repo-size/kuroringo90/-openclaw-setup-docker-new)](https://github.com/kuroringo90/-openclaw-setup-docker-new)
 [![Docker](https://img.shields.io/badge/docker-required-blue)](https://docs.docker.com/get-docker/)
@@ -23,21 +23,28 @@
 git clone https://github.com/kuroringo90/-openclaw-setup-docker-new.git
 cd openclaw-tailscale-qwen-branch-separated/openclaw-manager-system
 
-# 2. Edit configuration (set TS_AUTHKEY for remote access)
+# 2. Edit configuration (set TS_AUTHKEY only if you want Tailscale)
 nano .env
 
 # 3. Deploy
 ./deploy.sh
 
-# 4. Start OpenClaw (will ask about Tailscale)
+# 4. Start OpenClaw
 ./openclaw-manager.sh start
 
 # 5. Access locally
 curl http://127.0.0.1:18789/
 
-# 6. Get your secure URL (if Tailscale was enabled)
+# 6. Get your URL summary
 ./openclaw-manager.sh tunnel-url
 ```
+
+### Repository Model
+
+- this repository is the OpenClaw consumer application
+- the reusable Tailscale source of truth lives in the standalone repo `tailscale-funnel-compose`
+- Tailscale integration is optional; local app runtime remains the default
+- the vendored `tailscale-funnel-compose/` directory in this repo is compatibility-only, not the preferred module source
 
 ---
 
@@ -64,14 +71,15 @@ curl http://127.0.0.1:18789/
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
-│              Tailscale Funnel (HTTPS)                    │
-│         *.ts.net with automatic TLS                      │
+│              Tailscale Funnel (optional)                 │
+│         external module, *.ts.net with TLS              │
 └─────────────────────────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │         tailscale-funnel container                       │
 │    - Userspace networking (no TUN required)             │
+│    - Managed by external standalone module              │
 │    - Routes traffic to OpenClaw                         │
 └─────────────────────────────────────────────────────────┘
                          │
@@ -90,7 +98,7 @@ curl http://127.0.0.1:18789/
 
 ### tailscale-funnel-compose (Standalone Module)
 
-Modulo indipendente e riutilizzabile per qualsiasi progetto.
+Modulo indipendente e riutilizzabile per qualsiasi progetto. Questo repo lo consuma come dipendenza esterna.
 
 | Script | Purpose |
 |--------|---------|
@@ -99,10 +107,10 @@ Modulo indipendente e riutilizzabile per qualsiasi progetto.
 | `backup.sh` | Backup e restore operations |
 | `validate-config.sh` | Configuration validation |
 
-**Documentazione:**
-- [RUNBOOK.md](./tailscale-funnel-compose/RUNBOOK.md) - Operational procedures
-- [SECURITY.md](./tailscale-funnel-compose/SECURITY.md) - Security guide
-- [PRODUCTION-CHECKLIST.md](./tailscale-funnel-compose/PRODUCTION-CHECKLIST.md) - Deployment checklist
+**Source of truth:**
+- standalone repo: `https://github.com/kuroringo90/tailscale-funnel-compose`
+- local sibling preferred by this repo: `../tailscale-funnel-compose-standalone`
+- vendored copy in this repo: compatibility fallback only
 
 ### OpenClaw Manager System
 
@@ -136,8 +144,14 @@ TS_TAILNET=         # Optional, auto-detected
 
 ### Tailscale (Optional)
 
-If you set `TS_AUTHKEY`, the Tailscale Funnel module will be available.
-Configuration is handled separately in `tailscale-funnel-compose/.env`.
+If you set `TS_AUTHKEY`, the Tailscale module can be used.
+Configuration is handled in the external module `.env`, resolved in this order:
+
+1. `REPO_TS_STACK_DIR`
+2. `../tailscale-funnel-compose-standalone`
+3. `../tailscale-funnel-compose`
+4. `./tailscale-funnel-compose`
+5. `/opt/tailscale-funnel-compose`
 
 ### Validation
 
@@ -145,7 +159,7 @@ Before deploying, validate your configuration:
 
 ```bash
 cd openclaw-manager-system
-./validate-config.sh  # From tailscale-funnel-compose module
+${REPO_TS_STACK_DIR:-../tailscale-funnel-compose-standalone}/validate-config.sh
 ```
 
 ---

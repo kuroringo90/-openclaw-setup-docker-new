@@ -30,7 +30,7 @@ wait_for_network() {
 wait_for_tailscaled() {
   i=0
   while [ "$i" -lt 60 ]; do
-    if tailscale status >/dev/null 2>&1; then
+    if tailscale version >/dev/null 2>&1; then
       return 0
     fi
     i=$((i + 1))

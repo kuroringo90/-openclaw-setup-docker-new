@@ -1,4 +1,4 @@
-# OpenClaw + Tailscale - Architettura del Progetto
+# OpenClaw Consumer + External Tailscale Module
 
 ## 📁 Struttura del Repository
 
@@ -23,7 +23,7 @@ openclaw-tailscale-qwen-branch-separated/
 │   ├── MIGRATION.md                    # Guida migrazione
 │   └── README-WRAPPER.md               # Documentazione wrapper legacy
 │
-└── tailscale-funnel-compose/           # MODULO TAILSCALE (indipendente)
+└── tailscale-funnel-compose/           # COPIA VENDOR (fallback compatibilità)
     │
     ├── .env.example                    # Template configurazione Tailscale
     ├── docker-compose.yml              # Compose per container Tailscale
@@ -45,6 +45,8 @@ openclaw-tailscale-qwen-branch-separated/
 
 ## 🏗️ Architettura del Sistema
 
+Questo repository è il consumer OpenClaw. Il source of truth del layer Tailscale è il repository standalone `tailscale-funnel-compose`, usato come modulo esterno quando disponibile.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         HOST SYSTEM                             │
@@ -56,14 +58,14 @@ openclaw-tailscale-qwen-branch-separated/
 │                    REPOSITORY ROOT                              │
 │                                                                 │
 │  ┌────────────────────────────┐  ┌──────────────────────────┐  │
-│  │  openclaw-manager-system/  │  │ tailscale-funnel-compose/│  │
+│  │  openclaw-manager-system/  │  │ external TS module       │  │
 │  │                            │  │                          │  │
-│  │  OPENCLAW MODULE           │  │ TAILSCALE MODULE         │  │
+│  │  OPENCLAW CONSUMER         │  │ TAILSCALE SOURCE         │  │
 │  │                            │  │                          │  │
 │  │  • Deploy OpenClaw         │  │ • Tailscale Funnel       │  │
 │  │  • Gestione container      │  │ • Remote access          │  │
 │  │  • Config locale           │  │ • Multi-service          │  │
-│  │  • Solo localhost          │  │ • HTTPS automatico       │  │
+│  │  • Default locale          │  │ • HTTPS automatico       │  │
 │  │                            │  │                          │  │
 │  │  Script:                   │  │  Script:                 │  │
 │  │  - deploy.sh               │  │  - tailscale-funnel-     │  │
@@ -79,6 +81,16 @@ openclaw-tailscale-qwen-branch-separated/
 │                                  └──────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Risoluzione modulo Tailscale
+
+Il wrapper OpenClaw cerca il modulo in questo ordine:
+
+1. `REPO_TS_STACK_DIR`
+2. repo sibling `../tailscale-funnel-compose-standalone`
+3. repo sibling `../tailscale-funnel-compose`
+4. vendor locale `tailscale-funnel-compose/`
+5. installazione `/opt/tailscale-funnel-compose`
 
 ---
 
@@ -105,8 +117,8 @@ cd openclaw-manager-system
 ### 2. Tailscale-First (Remoto → Servizi)
 
 ```bash
-# Step 1: Configura Tailscale
-cd tailscale-funnel-compose
+# Step 1: Configura Tailscale nel repo standalone
+cd ../tailscale-funnel-compose-standalone
 cp .env.example .env
 nano .env  # Imposta TS_AUTHKEY
 
@@ -121,7 +133,7 @@ nano .env  # Imposta TS_AUTHKEY
 
 ```bash
 # Avvia solo Tailscale
-cd tailscale-funnel-compose
+cd ../tailscale-funnel-compose-standalone
 ./start-service.sh --only
 
 # Aggiungi servizi quando vuoi
@@ -136,9 +148,9 @@ cd tailscale-funnel-compose
 
 | Componente | Scopo | Dipendenze |
 |------------|-------|------------|
-| `deploy.sh` | Deploy iniziale OpenClaw | Docker, modulo Tailscale (opzionale) |
+| `deploy.sh` | Deploy iniziale OpenClaw | Docker, modulo Tailscale esterno (opzionale) |
 | `openclaw-manager.sh` | Start/stop/status OpenClaw | Docker |
-| `tailscale-add-service.sh` | Integrazione con Tailscale | Modulo Tailscale |
+| `tailscale-add-service.sh` | Integrazione con Tailscale | Modulo Tailscale esterno |
 | `.env` | Configurazione OpenClaw | Nessuna |
 | `openclaw.service` | Systemd auto-start | systemd |
 
@@ -159,11 +171,11 @@ cd tailscale-funnel-compose
 
 | Aspetto | OpenClaw | Tailscale |
 |---------|----------|-----------|
-| **Config** | `openclaw-manager-system/.env` | `tailscale-funnel-compose/.env` |
-| **Script** | `openclaw-manager.sh` | `start-service.sh` |
+| **Config** | `openclaw-manager-system/.env` | modulo esterno `.env` |
+| **Script** | `openclaw-manager.sh` | modulo esterno `start-service.sh` |
 | **Accesso** | Locale (127.0.0.1) | Remoto (Funnel HTTPS) |
 | **Dipendenze** | Docker | Docker + TS_AUTHKEY |
-| **Stato** | `~/.openclaw/data` | `~/.openclaw/tailscale-funnel/` |
+| **Stato** | `~/.openclaw/data` | modulo esterno `config/` e `state/` |
 
 ---
 
@@ -185,8 +197,7 @@ cd tailscale-funnel-compose
         │            │             │ (se configurato)
         │            │             ▼
         │            │    ┌────────────────────┐
-        │            │    │ tailscale-funnel-  │
-        │            │    │ compose/           │
+        │            │    │ external TS module │
         │            │    │ - start-service.sh │
         │            │    │ - compose.sh       │
         │            │    └────────────────────┘
@@ -199,10 +210,12 @@ cd tailscale-funnel-compose
    │   ├── .env               │ ← OpenClaw runtime config
    │   ├── docker-compose.yml │ ← OpenClaw container
    │   │                      │
-   │   └── tailscale-funnel/  │ ← Tailscale runtime
-   │       ├── state/         │ ← Tailscale state
-   │       ├── config/        │ ← Service registry
-   │       └── .env           │ ← Tailscale config
+   │   └── tailscale-funnel/  │ ← Runtime container data
+   │                          │
+   │ External module repo:    │
+   │   - .env                 │ ← Tailscale config
+   │   - config/services.tsv  │ ← Service registry
+   │   - state/               │ ← Tailscale state
    └──────────────────────────┘
 ```
 
@@ -254,7 +267,7 @@ cd tailscale-funnel-compose
 | Deploy iniziale | `./deploy.sh` | OpenClaw pronto + prompt Tailscale |
 | Start quotidiano | `./openclaw-manager.sh start` | OpenClaw attivo (no prompt) |
 | Aggiungi Tailscale | `./tailscale-add-service.sh add` | OpenClaw + Tailscale |
-| Solo Tailscale | `cd tailscale-funnel-compose && ./start-service.sh --only` | Solo Tailscale |
+| Solo Tailscale | `cd ../tailscale-funnel-compose-standalone && ./start-service.sh --only` | Solo Tailscale |
 | Aggiungi servizio | `./start-service.sh <name> <port>` | Nuovo servizio su Funnel |
 | Health check | `./health-check.sh` | Stato salute sistema |
 | Backup | `./backup.sh backup` | Backup configurato |

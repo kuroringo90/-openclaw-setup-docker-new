@@ -24,6 +24,18 @@ Questa versione è un wrapper compatibile con il nuovo stack standalone Compose-
 - `remove /path` risolve il nome servizio dal registry locale
 - `remove` senza argomenti esegue un reset totale della configurazione `serve/funnel` per compatibilità con lo script storico
 
+## Risoluzione del modulo
+
+Il wrapper cerca `tailscale-funnel-compose.sh` in questo ordine:
+
+1. `REPO_TS_STACK_DIR`
+2. `../tailscale-funnel-compose-standalone`
+3. `../tailscale-funnel-compose`
+4. `./tailscale-funnel-compose`
+5. `/opt/tailscale-funnel-compose`
+
+Il path preferito per sviluppo e produzione di questo repo è il modulo standalone sibling `../tailscale-funnel-compose-standalone`.
+
 ## Nota importante
 
 Dopo un `remove` senza argomenti, per ripristinare OpenClaw su `/` esegui:
