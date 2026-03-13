@@ -10,7 +10,7 @@ set -euo pipefail
 # ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER_NAME="${OPENCLAW_CONTAINER_NAME:-openclaw}"
-IMAGE_NAME="${OPENCLAW_IMAGE_NAME:-ghcr.io/openclaw/openclaw:latest}"
+IMAGE_NAME="${OPENCLAW_IMAGE_NAME:-ghcr.io/openclaw/openclaw@sha256:f4f1e98439a9880c063ce95a194cdce3988757772fd0ac78ead1f45475006e5e}"
 DATA_DIR="${OPENCLAW_DATA_DIR:-${HOME}/.openclaw}"
 COMPOSE_FILE="${DATA_DIR}/docker-compose.yml"
 ENV_FILE="${DATA_DIR}/.env"
@@ -28,6 +28,112 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERRORE]${NC} $*"; }
+
+build_json_array_from_csv() {
+    local csv="${1:-}"
+    python3 - "$csv" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1].strip()
+items = []
+if raw:
+    for part in raw.split(","):
+        value = part.strip()
+        if value and value not in items:
+            items.append(value)
+print(json.dumps(items))
+PY
+}
+
+resolve_openclaw_allowed_origins() {
+    local origins=(
+        "http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}"
+        "http://localhost:${DEFAULT_OPENCLAW_PORT}"
+    )
+    local seen=",${origins[0]},${origins[1]},"
+
+    if [[ -n "${OPENCLAW_ALLOWED_ORIGINS:-}" ]]; then
+        local item
+        IFS=',' read -r -a extra <<< "${OPENCLAW_ALLOWED_ORIGINS}"
+        for item in "${extra[@]}"; do
+            item="${item## }"
+            item="${item%% }"
+            [[ -n "${item}" ]] || continue
+            [[ "${seen}" == *",${item},"* ]] && continue
+            origins+=("${item}")
+            seen+="${item},"
+        done
+    elif [[ -x "${SCRIPT_DIR}/tailscale-add-service.sh" ]]; then
+        local public_url
+        while IFS= read -r public_url; do
+            [[ "${public_url}" == *"#token="* ]] || continue
+            public_url="${public_url%%#*}"
+            public_url="${public_url%/}"
+            [[ -n "${public_url}" ]] || continue
+            [[ "${seen}" == *",${public_url},"* ]] && continue
+            origins+=("${public_url}")
+            seen+="${public_url},"
+        done < <("${SCRIPT_DIR}/tailscale-add-service.sh" url 2>/dev/null || true)
+    fi
+
+    local joined=""
+    local origin
+    for origin in "${origins[@]}"; do
+        if [[ -n "${joined}" ]]; then
+            joined+=","
+        fi
+        joined+="${origin}"
+    done
+    printf '%s\n' "${joined}"
+}
+
+resolve_openclaw_trusted_proxies() {
+    if [[ -n "${OPENCLAW_TRUSTED_PROXIES:-}" ]]; then
+        printf '%s\n' "${OPENCLAW_TRUSTED_PROXIES}"
+        return 0
+    fi
+
+    local csv="127.0.0.1/32"
+    local networks_json
+    networks_json="$(docker inspect "${CONTAINER_NAME}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null || true)"
+    if [[ -n "${networks_json}" && "${networks_json}" != "null" ]]; then
+        local subnets
+        subnets="$(NETWORKS_JSON="${networks_json}" python3 - <<'PY'
+import json
+import os
+import subprocess
+
+networks = json.loads(os.environ["NETWORKS_JSON"])
+subnets = []
+for name in networks:
+    try:
+        out = subprocess.check_output(
+            ["docker", "network", "inspect", name, "--format", "{{json .IPAM.Config}}"],
+            text=True,
+        ).strip()
+    except Exception:
+        continue
+    if not out or out == "null":
+        continue
+    try:
+        cfg = json.loads(out)
+    except Exception:
+        continue
+    for entry in cfg or []:
+        subnet = (entry or {}).get("Subnet")
+        if subnet and subnet not in subnets:
+            subnets.append(subnet)
+print(",".join(subnets))
+PY
+)"
+        if [[ -n "${subnets}" ]]; then
+            csv+=",${subnets}"
+        fi
+    fi
+
+    printf '%s\n' "${csv}"
+}
 
 persist_env_var() {
     local key="$1" value="$2"
@@ -89,7 +195,7 @@ check_image() {
 }
 
 check_openclaw_health() {
-    curl -fsS --max-time 3 "http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}" >/dev/null 2>&1
+    curl -fsS --max-time 3 "http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}/healthz" >/dev/null 2>&1
 }
 
 ensure_openclaw_dirs() {
@@ -105,6 +211,16 @@ ensure_openclaw_dirs() {
 
 ensure_openclaw_runtime_config() {
     local config_file="${DATA_DIR}/data/openclaw.json"
+    local allowed_origins_csv
+    local trusted_proxies_csv
+    local host_header_fallback="${OPENCLAW_ALLOW_HOST_HEADER_ORIGIN_FALLBACK:-false}"
+
+    allowed_origins_csv="$(resolve_openclaw_allowed_origins)"
+    trusted_proxies_csv="$(resolve_openclaw_trusted_proxies)"
+
+    OPENCLAW_ALLOWED_ORIGINS_JSON="$(build_json_array_from_csv "${allowed_origins_csv}")" \
+    OPENCLAW_TRUSTED_PROXIES_JSON="$(build_json_array_from_csv "${trusted_proxies_csv}")" \
+    OPENCLAW_HOST_HEADER_FALLBACK="${host_header_fallback}" \
     python3 - "$config_file" <<'PY'
 import json
 import os
@@ -122,8 +238,14 @@ if os.path.exists(path):
 
 gateway = data.setdefault("gateway", {})
 gateway["bind"] = "lan"
+gateway["trustedProxies"] = json.loads(os.environ["OPENCLAW_TRUSTED_PROXIES_JSON"])
 control_ui = gateway.setdefault("controlUi", {})
-control_ui["dangerouslyAllowHostHeaderOriginFallback"] = True
+control_ui["allowedOrigins"] = json.loads(os.environ["OPENCLAW_ALLOWED_ORIGINS_JSON"])
+
+if os.environ.get("OPENCLAW_HOST_HEADER_FALLBACK", "").lower() == "true":
+    control_ui["dangerouslyAllowHostHeaderOriginFallback"] = True
+else:
+    control_ui.pop("dangerouslyAllowHostHeaderOriginFallback", None)
 
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, 'w', encoding='utf-8') as fh:
@@ -139,6 +261,7 @@ services:
     image: \${IMAGENAME}
     container_name: ${CONTAINER_NAME}
     restart: unless-stopped
+    init: true
     ports:
       - "127.0.0.1:${DEFAULT_OPENCLAW_PORT}:${DEFAULT_OPENCLAW_PORT}"
     volumes:
@@ -147,6 +270,19 @@ services:
       - NODE_ENV=production
       - OPENCLAW_GATEWAY_PORT=${DEFAULT_OPENCLAW_PORT}
       - OPENCLAW_GATEWAY_BIND=lan
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     stdin_open: true
     tty: true
 EOF_COMPOSE
@@ -157,7 +293,7 @@ ensure_openclaw_env() {
         cat > "${ENV_FILE}" <<'EOF_ENV'
 # OpenClaw settings
 OPENCLAW_CONTAINER_NAME=openclaw
-OPENCLAW_IMAGE_NAME=ghcr.io/openclaw/openclaw:latest
+OPENCLAW_IMAGE_NAME=ghcr.io/openclaw/openclaw@sha256:f4f1e98439a9880c063ce95a194cdce3988757772fd0ac78ead1f45475006e5e
 OPENCLAW_DATA_DIR=${HOME}/.openclaw
 OPENCLAW_PORT=18789
 EOF_ENV
@@ -244,6 +380,9 @@ update_openclaw_image() {
     fi
 
     log_info "Aggiorno immagine OpenClaw: ${requested_image}"
+    if [[ "${requested_image}" == *":latest" ]]; then
+        log_warn "Stai usando un tag floating (:latest); per produzione è preferibile un digest o una release taggata"
+    fi
     docker pull "${requested_image}"
     pulled_image_id="$(docker image inspect --format '{{.Id}}' "${requested_image}" 2>/dev/null || true)"
 

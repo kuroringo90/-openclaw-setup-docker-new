@@ -53,7 +53,7 @@ curl http://127.0.0.1:18789/
 | Feature | Description |
 |---------|-------------|
 | 🔒 **Secure Access** | Tailscale Funnel with HTTPS encryption |
-| 🔄 **Auto-start** | Systemd service for boot persistence |
+| 🔄 **Auto-start** | Docker `restart: unless-stopped` for boot persistence |
 | 💾 **Backups** | Automated daily backups with retention |
 | 🏥 **Health Checks** | Production monitoring with exit codes |
 | 📊 **Monitoring** | Prometheus/Nagios integration ready |
@@ -214,6 +214,19 @@ ${REPO_TS_STACK_DIR:-../tailscale-funnel-compose-standalone}/validate-config.sh
 ./backup.sh verify ~/.openclaw/backups/openclaw-backup-20240101_120000.tar.gz
 ```
 
+### Backup and Scheduling Model
+
+Detailed operational options are documented separately in:
+
+- [BACKUP-SCHEDULING-OPTIONS.md](./openclaw-manager-system/BACKUP-SCHEDULING-OPTIONS.md)
+
+Recommended baseline for this repo:
+
+- keep `docker healthcheck` in the main container
+- keep `backup.sh` and `health-check.sh` in the repo
+- use a host scheduler for simplicity on a single Docker host
+- move to a dedicated maintenance container only if you want fully container-native scheduling
+
 ### Adding Secondary Services
 
 ```bash
@@ -264,15 +277,17 @@ Default behavior:
 
 Observed in runtime validation:
 
-- OpenClaw dashboard works correctly behind Funnel only when exposed on `/openclaw/` with trailing slash
-- the dashboard URL must include the gateway token, for example `https://<funnel-host>/openclaw/#token=...`
+- OpenClaw dashboard works correctly behind Funnel when exposed on the hostname root `/`
+- the dashboard URL must include the gateway token, for example `https://<funnel-host>/#token=...`
 - the current production integration enables `gateway.bind=lan`
-- the current production integration also enables `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback=true`
+- the current production integration uses explicit `gateway.controlUi.allowedOrigins`
+- the current production integration keeps `gateway.trustedProxies` explicit and minimal
+- the current production integration removes `gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback` by default
 
 Security implication:
 
-- this fallback weakens origin validation for the Control UI and should be treated as a temporary compatibility setting, not a final hardening state
-- a stricter follow-up should replace it with explicit `gateway.controlUi.allowedOrigins` matching the final public URL(s)
+- the remaining exposure model is still public Internet via Funnel, so token auth and device pairing remain mandatory
+- if reverse-proxy topology changes, review `OPENCLAW_ALLOWED_ORIGINS` and `OPENCLAW_TRUSTED_PROXIES` explicitly instead of re-enabling dangerous fallback
 
 ### Tailscale Funnel Runtime Note
 
@@ -280,7 +295,7 @@ Observed in runtime validation:
 
 - `tailscale funnel` is the correct public exposure mode; `tailscale serve` remains tailnet-only
 - path-based public exposure is sensitive to the backend application path model
-- applications using relative frontend assets may require a trailing slash on the public path, as seen with OpenClaw on `/openclaw/`
+- OpenClaw requires root-host exposure for stable websocket behavior behind Funnel in the current upstream build
 - public edge behavior can be temporarily inconsistent immediately after route changes or resets
 
 Security implication:
@@ -326,19 +341,20 @@ define command {
 
 ---
 
-## 🔧 Systemd Auto-Start
+## 🔧 Container Auto-Start
 
-Enable automatic start on boot:
+OpenClaw is a containerized project. The production baseline is:
+
+- Docker container with `restart: unless-stopped`
+- native Docker `healthcheck`
+- external scheduler of your choice for `backup.sh` and `health-check.sh`
+
+Example scheduler on the host:
 
 ```bash
-# Install service (requires sudo)
-sudo ./openclaw-manager.sh systemd-install
-
-# Or manually
-sudo cp openclaw.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable openclaw
-sudo systemctl start openclaw
+# /etc/cron.d/openclaw
+*/5 * * * * root /opt/openclaw-manager-system/health-check.sh --nagios --public
+0 3 * * * root /opt/openclaw-manager-system/backup.sh backup
 ```
 
 ---

@@ -75,13 +75,69 @@ PY
 
 show_openclaw_dashboard_url() {
     local base_url="$1"
+    local service_path="${2:-/}"
     local token
     token="$(get_openclaw_token)"
-    if [[ -n "$token" ]]; then
-        echo "${base_url}/openclaw/#token=${token}"
-    else
-        echo "${base_url}/openclaw/"
+    service_path="${service_path%/}"
+
+    if [[ -z "${service_path}" ]]; then
+        service_path="/"
     fi
+
+    if [[ -n "$token" ]]; then
+        if [[ "${service_path}" == "/" ]]; then
+            echo "${base_url}/#token=${token}"
+        else
+            echo "${base_url}${service_path}/#token=${token}"
+        fi
+    else
+        if [[ "${service_path}" == "/" ]]; then
+            echo "${base_url}/"
+        else
+            echo "${base_url}${service_path}/"
+        fi
+    fi
+}
+
+get_openclaw_service_path() {
+    local registry_file="${TS_STACK_DIR}/config/services.tsv"
+    [[ -f "${registry_file}" ]] || return 1
+
+    while IFS=$'\t' read -r name _target path _mode; do
+        [[ "${name}" == "openclaw" ]] || continue
+        printf '%s\n' "${path}"
+        return 0
+    done < "${registry_file}"
+
+    return 1
+}
+
+show_openclaw_public_url() {
+    local openclaw_path
+    local base_urls
+
+    [[ -f "$TS_MANAGER" ]] || return 1
+
+    openclaw_path="$(get_openclaw_service_path || true)"
+    [[ -n "${openclaw_path}" ]] || return 1
+
+    base_urls="$(cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)"
+    while IFS= read -r url; do
+        [[ -n "$url" ]] || continue
+        if [[ "${openclaw_path}" == "/" && "$url" =~ ^https://[^/]+/?$ ]]; then
+            local base_url="${url%/}"
+            show_openclaw_dashboard_url "${base_url}" "${openclaw_path}"
+            return 0
+        fi
+        if [[ "${openclaw_path}" != "/" && ( "$url" == *"${openclaw_path%/}" || "$url" == *"${openclaw_path%/}/" ) ]]; then
+            local base_url="${url%"${openclaw_path%/}/"}"
+            base_url="${base_url%"${openclaw_path%/}"}"
+            show_openclaw_dashboard_url "${base_url}" "${openclaw_path}"
+            return 0
+        fi
+    done <<< "${base_urls}"
+
+    return 1
 }
 
 check_module() {
@@ -203,14 +259,19 @@ remove_openclaw() {
 show_url() {
     if [[ -f "$TS_MANAGER" ]]; then
         local base_urls
+        local openclaw_path
         base_urls="$(cd "${TS_STACK_DIR}" && "${TS_MANAGER}" url)"
+        openclaw_path="$(get_openclaw_service_path || true)"
         if [[ -n "$base_urls" ]]; then
             while IFS= read -r url; do
                 [[ -n "$url" ]] || continue
-                if [[ "$url" == */openclaw || "$url" == */openclaw/ ]]; then
+                if [[ -n "${openclaw_path}" && "${openclaw_path}" == "/" && "$url" =~ ^https://[^/]+/?$ ]]; then
+                    local base_url="${url%/}"
+                    show_openclaw_dashboard_url "${base_url}" "${openclaw_path}"
+                elif [[ "$url" == */openclaw || "$url" == */openclaw/ ]]; then
                     local base_url="${url%/openclaw/}"
                     base_url="${base_url%/openclaw}"
-                    show_openclaw_dashboard_url "${base_url}"
+                    show_openclaw_dashboard_url "${base_url}" "/openclaw"
                 else
                     echo "$url"
                 fi
@@ -227,7 +288,7 @@ status() {
 
     echo
     echo -e "${CYAN}=== OpenClaw Dashboard URL ===${NC}"
-    show_url || true
+    show_openclaw_public_url || true
     
     echo
     echo -e "${CYAN}=== Tailscale Funnel ===${NC}"
@@ -250,7 +311,7 @@ Comandi:
 
 Esempi:
   $0 add      # Aggiungi OpenClaw a Funnel
-  $0 add openclaw 18789 /openclaw/ serve
+  $0 add openclaw 18789 / serve
   $0 url      # Mostra URL pubblico
   $0 status   # Mostra stato completo
 EOF
