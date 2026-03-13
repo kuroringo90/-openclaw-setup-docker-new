@@ -177,6 +177,9 @@ ${REPO_TS_STACK_DIR:-../tailscale-funnel-compose-standalone}/validate-config.sh
 
 # Restart
 ./openclaw-manager.sh restart
+
+# Pull and apply a newer OpenClaw image only if needed
+./openclaw-manager.sh update-image
 ```
 
 ### Status & Monitoring

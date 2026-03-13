@@ -29,6 +29,32 @@ log_success() { echo -e "${GREEN}[OK]${NC} $*"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERRORE]${NC} $*"; }
 
+persist_env_var() {
+    local key="$1" value="$2"
+    python3 - "$ENV_FILE" "$key" "$value" <<'PY'
+import pathlib
+import re
+import sys
+
+env_path = pathlib.Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+
+content = env_path.read_text() if env_path.exists() else ""
+pattern = re.compile(rf"^{re.escape(key)}=.*$", re.MULTILINE)
+line = f"{key}={value}"
+
+if pattern.search(content):
+    content = pattern.sub(line, content)
+else:
+    if content and not content.endswith("\n"):
+        content += "\n"
+    content += line + "\n"
+
+env_path.write_text(content)
+PY
+}
+
 # Carica config esistente OpenClaw
 if [[ -f "${ENV_FILE}" ]]; then
     set -a
@@ -203,6 +229,49 @@ logs_openclaw() {
     fi
 }
 
+update_openclaw_image() {
+    local requested_image="${1:-${IMAGE_NAME}}"
+    local previous_image_id=""
+    local current_container_image_id=""
+    local pulled_image_id=""
+
+    check_prereqs
+    ensure_openclaw_env
+
+    previous_image_id="$(docker image inspect --format '{{.Id}}' "${requested_image}" 2>/dev/null || true)"
+    if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        current_container_image_id="$(docker inspect --format '{{.Image}}' "${CONTAINER_NAME}" 2>/dev/null || true)"
+    fi
+
+    log_info "Aggiorno immagine OpenClaw: ${requested_image}"
+    docker pull "${requested_image}"
+    pulled_image_id="$(docker image inspect --format '{{.Id}}' "${requested_image}" 2>/dev/null || true)"
+
+    if [[ -n "${pulled_image_id}" ]] && [[ "${previous_image_id}" == "${pulled_image_id}" ]] && [[ "${current_container_image_id}" == "${pulled_image_id}" ]]; then
+        log_success "Nessun update necessario: immagine locale e container sono già allineati"
+        return 0
+    fi
+
+    persist_env_var "OPENCLAW_IMAGE_NAME" "${requested_image}"
+    IMAGE_NAME="${requested_image}"
+    export OPENCLAW_IMAGE_NAME="${requested_image}"
+
+    ensure_openclaw_dirs
+    ensure_openclaw_runtime_config
+    ensure_openclaw_compose
+
+    export IMAGENAME="${IMAGE_NAME}"
+    log_info "Ricreo il container OpenClaw con l'immagine aggiornata..."
+    compose_cmd -f "${COMPOSE_FILE}" up -d --force-recreate
+
+    sleep 2
+    if check_openclaw_health; then
+        log_success "OpenClaw raggiungibile su http://127.0.0.1:${DEFAULT_OPENCLAW_PORT}"
+    else
+        log_warn "Container aggiornato ma healthcheck HTTP non ancora pronto"
+    fi
+}
+
 full_reset() {
     log_warn "Reset completo OpenClaw"
     stop_openclaw || true
@@ -218,6 +287,7 @@ Comandi principali:
   start           Avvia OpenClaw
   stop            Ferma OpenClaw
   restart         Riavvia OpenClaw
+  update-image [image]  Aggiorna immagine Docker OpenClaw e ricrea se serve
   status          Mostra stato OpenClaw
   status-full     Mostra stato OpenClaw + Tailscale
   logs            Mostra log in tempo reale
@@ -230,6 +300,8 @@ Gestione Tailscale:
 
 Esempi:
   $0 start
+  $0 update-image
+  $0 update-image ghcr.io/openclaw/openclaw:latest
   $0 tailscale-add grafana 3000 /grafana
   $0 tailscale-add grafana 3000 /grafana serve
   $0 tunnel-url
@@ -243,6 +315,7 @@ case "$cmd" in
     start) start_openclaw ;;
     stop) stop_openclaw ;;
     restart) restart_openclaw ;;
+    update-image) update_openclaw_image "$@" ;;
     status) status_openclaw ;;
     status-full) 
         status_openclaw
